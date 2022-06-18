@@ -52,7 +52,7 @@ ASFDCharacter::ASFDCharacter(const FObjectInitializer& ObjectInitializer)
 	ShieldMesh->SetupAttachment(GetMesh(), "Shield_Socket");
 	ShieldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	VitalityComponentNew = CreateDefaultSubobject<USFDVitalityComponent>("VitalityComponent");
+	SFDVitalityComponent = CreateDefaultSubobject<USFDVitalityComponent>("SFDVitalityComponent");
 
 	CombatManagerComponent = CreateDefaultSubobject<USFDCombatManagerComponent>("CombatManagerComponent");
 }
@@ -73,7 +73,7 @@ void ASFDCharacter::Tick(float DeltaTime)
 	{
 		LastVelocityDirection = CurrCharVel.GetSafeNormal();
 	}
-	else if(IsInBlock())
+	else if(IsBlockInitiated())
 	{
 		LastVelocityDirection = BlockDirection;
 	}
@@ -130,7 +130,7 @@ void ASFDCharacter::Tick(float DeltaTime)
 		}
 	}
 
-	if (LastBlockSnapshot.IsValid())
+	if (IsBlockInitiated())
 	{
 		const USFDAnimInstance* AnimInstance = Cast<USFDAnimInstance>(GetMesh()->GetAnimInstance());
 		if (AnimInstance != nullptr
@@ -184,7 +184,7 @@ float ASFDCharacter::PlayAnimMontage(UAnimMontage* AnimMontage, bool OnWholeBody
 
 float ASFDCharacter::TakeDamage(float Damage, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	if (IsInBlock())
+	if (IsAbleToBlockHit(FVector::ZeroVector))
 	{
 		FSFDTimeSnapshot CurrBlockSnapshot = FSFDTimeSnapshot::MakeSnapshot();
 
@@ -216,9 +216,9 @@ float ASFDCharacter::TakeDamage(float Damage, FDamageEvent const& DamageEvent, A
 		GEngine->AddOnScreenDebugMessage(0, 2.0f, FColor::Blue, FString("DAMAGE TAKEN!!"));
 	}
 
-	if (VitalityComponentNew != nullptr)
+	if (SFDVitalityComponent != nullptr)
 	{
-		VitalityComponentNew->AddHealth(Damage * -1.0f);
+		SFDVitalityComponent->AddHealth(Damage * -1.0f);
 	}
 
 	EndAttack();
@@ -238,12 +238,12 @@ FVector ASFDCharacter::CalculateForwardMovementVector() const
 
 FRotator ASFDCharacter::CalculateRotationFromDirection() const
 {
-	if(IsInBlock())
+	if(IsBlockInitiated())
 	{
-		return BlockDirection.Rotation();
+		return FRotator(0.0f, BlockDirection.Rotation().Yaw, 0.0f);
 	}
-		
-	return LastVelocityDirection.Rotation();
+	
+	return FRotator(0.0f, LastVelocityDirection.Rotation().Yaw, 0.0f);
 }
 
 void ASFDCharacter::EndAttack()
@@ -258,7 +258,7 @@ void ASFDCharacter::EndAttack()
 
 void ASFDCharacter::StartBlock()
 {
-	if (IsInBlock())
+	if (IsBlockInitiated())
 	{
 		return;
 	}
@@ -279,7 +279,7 @@ void ASFDCharacter::StartBlock()
 
 void ASFDCharacter::EndBlock()
 {
-	if (!LastBlockSnapshot.IsValid())
+	if (!IsBlockInitiated())
 	{
 		return;
 	}
@@ -295,15 +295,15 @@ void ASFDCharacter::EndBlock()
 
 bool ASFDCharacter::IsTired() const
 {
-	if (VitalityComponentNew == nullptr)
+	if (SFDVitalityComponent == nullptr)
 	{
 		return false;
 	}
 
-	return VitalityComponentNew->GetCurrentStamina() <= 0;
+	return SFDVitalityComponent->GetCurrentStamina() <= 0;
 }
 
-bool ASFDCharacter::IsInBlock() const
+bool ASFDCharacter::IsAbleToBlockHit(const FVector& InHitDirection) const
 {
 	bool bIsInBlockingAnim = false;
 
@@ -314,7 +314,7 @@ bool ASFDCharacter::IsInBlock() const
 			|| AnimInstance->GetCurrentActiveMontage() == CombatManagerComponent->GetComboMovesLibrary()->DamageTakenWithShieldAnimation;
 	}
 
-	return LastBlockSnapshot.IsValid() && bIsInBlockingAnim;
+	return IsBlockInitiated() && bIsInBlockingAnim;
 }
 
 bool ASFDCharacter::IsAttacking() const
@@ -393,11 +393,6 @@ void ASFDCharacter::EndBlock_Input()
 
 void ASFDCharacter::HandleMeshRotationTowardsDirection(const float DeltaSeconds)
 {
-	if(GetMesh() == nullptr)
-	{
-		return;
-	}
-
 	const FRotator CurrentBaseMeshRotation =  GetActorRotation();
 	FRotator NewBaseMeshRotation = CalculateRotationFromDirection();
 

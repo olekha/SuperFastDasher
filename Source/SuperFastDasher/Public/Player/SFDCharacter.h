@@ -31,7 +31,12 @@ public:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	// Sets default values for this character's properties
 	
-	bool IsInBlock() const;
+	bool IsAbleToBlockHit(const FVector& InHitDirection) const;
+	FORCEINLINE bool IsBlockInitiated() const
+	{
+		return LastBlockSnapshot.IsValid();
+	}
+	
 	bool IsAttacking() const;
 
 	FORCEINLINE UStaticMeshComponent* GetWeaponMeshComponent() const 
@@ -41,7 +46,7 @@ public:
 
 	FORCEINLINE USFDVitalityComponent* GetVitalityComponent() const
 	{
-		return VitalityComponentNew;
+		return SFDVitalityComponent;
 	}
 
 	void EndAttack();			
@@ -104,7 +109,7 @@ private:
 	UStaticMeshComponent* ShieldMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
-	USFDVitalityComponent* VitalityComponentNew;
+	USFDVitalityComponent* SFDVitalityComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	USFDCombatManagerComponent* CombatManagerComponent;
