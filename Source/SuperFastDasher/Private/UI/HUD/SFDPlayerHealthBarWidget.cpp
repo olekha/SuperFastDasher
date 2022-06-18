@@ -78,7 +78,7 @@ float USFDPlayerHealthBarWidget::GetCurrentHealthValue() const
 		}
 	}
 
-	ensure(false);
+	ensureAlways(false);
 
 	UE_LOG(LogTemp, Error, TEXT("USFDPlayerHealthBarWidget::GetCurrentHealthValue: Can't retreive current health value for widget"));
 

@@ -57,9 +57,11 @@ public:
 	bool IsTired() const;
 
 	virtual float PlayAnimMontage(class UAnimMontage* AnimMontage, float InPlayRate = 1.f, FName StartSectionName = NAME_None) override;
-
 	float PlayAnimMontage(class UAnimMontage* AnimMontage, bool OnWholeBody, float InPlayRate = 1.f, FName StartSectionName = NAME_None);
 
+	void OnEnteredIntoRoomLoader();
+	void OnStepOutFromRoomLoader();
+	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

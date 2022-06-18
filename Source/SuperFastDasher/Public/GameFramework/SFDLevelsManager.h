@@ -35,10 +35,28 @@ public:
 	void SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader);
 
 	void GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex) const;
+
+	FORCEINLINE int8 GetPreviousRoomIndex() const
+	{
+		return PreviousRoomIndex;
+	}
+	
+	FORCEINLINE int8 GetCurrentRoomIndex() const
+	{
+		return CurrentRoomIndex;
+	}
+	
+	FORCEINLINE int8 GetPendingRoomIndex() const
+	{
+		return PendingRoomIndex;
+	}
 	
 private:
 		
-	void SpawnLevel(const TSoftObjectPtr<UWorld>& InLevelClass, const FVector& InLevelLocation, const FRotator& InLevelRotation);
+	void SpawnRoom(const TSoftObjectPtr<UWorld>& InLevelClass, const FVector& InLevelLocation, const FRotator& InLevelRotation);
+
+	void PrepareNextRoom();
+	void ClearPreviousRoom();
 	
 	void InitAdjacency();
 
@@ -48,29 +66,34 @@ private:
 	UFUNCTION()
 	void OnNextLevelLoaded();
 
-	void TransportPlayer(const APlayerStart* InPlayerStart);
+	void TransportPlayerToNextLevel();
+
+	void ClearAdjacencyMatrix();
+	void ClearIncidenceMatrix();
 	
 private:
 	
 	UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess))
-	TSoftObjectPtr<UWorld> LevelInstance;
+	TSoftObjectPtr<UWorld> RoomInstanceTemplate;
 	
 	UPROPERTY(Transient)
-	ULevelStreamingDynamic* CurrentLevelDynamicInstance;
+	ULevelStreamingDynamic* CurrentRoomDynamicInstance;
 	
 	UPROPERTY(Transient)
-	ULevelStreamingDynamic* PendingLevelDynamicInstance;
+	ULevelStreamingDynamic* PendingRoomDynamicInstance;
 		
 	uint8** AdjacencyMatrix;
 	uint8** IncidenceMatrix;
 
-	static uint8 LevelsAmount;
-
+	uint8 RoomsAmount;
+	uint8 ConnectionsAmount;
+	
 	//@TODO temp
-	uint8 LevelIndexToStart = 0;
+	uint8 RoomIndexToStart = 0;
 
+	int8 PreviousRoomIndex = INDEX_NONE;
 	//@TODO temp, should be moved into custom ULevelStreamingDynamic
-	int8 CurrentLevelIndex = INDEX_NONE;
+	int8 CurrentRoomIndex = INDEX_NONE;
 	//@TODO temp, should be moved into custom ULevelStreamingDynamic
-	int8 PendingLevelIndex = INDEX_NONE;
+	int8 PendingRoomIndex = INDEX_NONE;
 };

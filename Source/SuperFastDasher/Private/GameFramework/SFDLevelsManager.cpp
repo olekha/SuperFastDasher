@@ -6,37 +6,47 @@
 #include "SuperFastDasher/SuperFastDasher.h"
 
 #include "Engine/LevelStreamingDynamic.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SFDLevelCore.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetTextLibrary.h"
-
-
-
-uint8 USFDLevelsManager::LevelsAmount = 10;
+#include "Player/SFDCharacter.h"
 
 USFDLevelsManager::USFDLevelsManager()
 {
+	RoomsAmount = 10;
+	ConnectionsAmount = RoomsAmount - 1;
+	
 	InitAdjacency();
 	FindMST();
 
-	PrintMatrix(AdjacencyMatrix, LevelsAmount, LevelsAmount, "Adjacency Matrix");
-	PrintMatrix(IncidenceMatrix, LevelsAmount - 1, LevelsAmount, "Incidence Matrix");
+	PrintMatrix(AdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
+	PrintMatrix(IncidenceMatrix, ConnectionsAmount, RoomsAmount, "Incidence Matrix");
 }
 
 USFDLevelsManager::~USFDLevelsManager()
 {
-	if(AdjacencyMatrix != nullptr)
-    {
-    	for(uint8 i = 0; i < LevelsAmount; ++i)
-    	{
-    		delete[] AdjacencyMatrix[i];
-    	}
-    	delete[] AdjacencyMatrix;
-    }
+	ClearAdjacencyMatrix();
+	ClearIncidenceMatrix();
+}
 
+void USFDLevelsManager::ClearAdjacencyMatrix()
+{
+	if(AdjacencyMatrix != nullptr)
+	{
+		for(uint8 i = 0; i < RoomsAmount; ++i)
+		{
+			delete[] AdjacencyMatrix[i];
+		}
+		delete[] AdjacencyMatrix;
+	}
+}
+
+void USFDLevelsManager::ClearIncidenceMatrix()
+{
 	if(IncidenceMatrix != nullptr)
 	{
-		for(uint8 i = 0; i < LevelsAmount - 1; ++i)
+		for(uint8 i = 0; i < RoomsAmount - 1; ++i)
 		{
 			delete[] IncidenceMatrix[i];
 		}
@@ -46,24 +56,17 @@ USFDLevelsManager::~USFDLevelsManager()
 
 void USFDLevelsManager::InitAdjacency()
 {
-	if(AdjacencyMatrix != nullptr)
-	{
-		for(uint8 i = 0; i < LevelsAmount; ++i)
-		{
-			delete[] AdjacencyMatrix[i];
-		}
-		delete[] AdjacencyMatrix;
-	}
+	ClearAdjacencyMatrix();
 	
-	AdjacencyMatrix = new uint8*[LevelsAmount];
-    for(uint8 i = 0; i < LevelsAmount; ++i)
+	AdjacencyMatrix = new uint8*[RoomsAmount];
+    for(uint8 i = 0; i < RoomsAmount; ++i)
     {
-    	AdjacencyMatrix[i] = new uint8[LevelsAmount];
+    	AdjacencyMatrix[i] = new uint8[RoomsAmount];
     }
 
-	for(uint8 i = 0; i < LevelsAmount; ++i)
+	for(uint8 i = 0; i < RoomsAmount; ++i)
 	{
-		for(uint8 j = i; j < LevelsAmount; ++j)
+		for(uint8 j = i; j < RoomsAmount; ++j)
 		{
 			if(i == j)
 			{
@@ -85,25 +88,16 @@ void USFDLevelsManager::FindMST()
 		return;
 	}
 	
-	if(IncidenceMatrix != nullptr)
-	{
-		for(uint8 i = 0; i < LevelsAmount - 1; ++i)
-		{
-			delete[] IncidenceMatrix[i];
-		}
-		delete[] IncidenceMatrix;
-	}
-	
-	const uint8 EdgesAmount = LevelsAmount - 1; 
-	
+	ClearIncidenceMatrix();
+
 	TArray<uint8> Tree;
-	Tree.Reserve(LevelsAmount);
-	Tree.Add(FMath::RandRange(0, LevelsAmount - 1));
+	Tree.Reserve(RoomsAmount);
+	Tree.Add(FMath::RandRange(0, RoomsAmount - 1));
 
 	TArray<TPair<uint8, uint8>> Edges;
-	Edges.Reserve(EdgesAmount);
+	Edges.Reserve(ConnectionsAmount);
 	
-	while(Tree.Num() < LevelsAmount)
+	while(Tree.Num() < RoomsAmount)
 	{
 		TPair<int8, int8> CheapestEdge = { INDEX_NONE, INDEX_NONE };
 		uint8 CheapestEdgeWeight = MAX_uint8;
@@ -111,7 +105,7 @@ void USFDLevelsManager::FindMST()
 		for(uint8 i = 0; i < Tree.Num(); ++i)
 		{
 			const uint8 SearchedVertex = Tree[i];
-			for(uint8 j = 0; j < LevelsAmount; ++j)
+			for(uint8 j = 0; j < RoomsAmount; ++j)
 			{
 				if(Tree.Contains(j))
 				{
@@ -139,15 +133,15 @@ void USFDLevelsManager::FindMST()
 		}
 	}
 	
-	IncidenceMatrix = new uint8*[LevelsAmount];
-	for(uint8 i = 0; i < LevelsAmount; ++i)
+	IncidenceMatrix = new uint8*[RoomsAmount];
+	for(uint8 i = 0; i < RoomsAmount; ++i)
 	{
-		IncidenceMatrix[i] = new uint8[EdgesAmount];
+		IncidenceMatrix[i] = new uint8[ConnectionsAmount];
 	}
 
-	for(uint8 i = 0; i < LevelsAmount; ++i)
+	for(uint8 i = 0; i < RoomsAmount; ++i)
 	{
-		for(uint8 j = 0; j < EdgesAmount; ++j)
+		for(uint8 j = 0; j < ConnectionsAmount; ++j)
 		{
 			IncidenceMatrix[j][i] = 0;
 		}
@@ -165,7 +159,9 @@ void USFDLevelsManager::FindMST()
 void USFDLevelsManager::PrintAdjacencyMatrix_DEBUG()
 {
 	InitAdjacency();
-	PrintMatrix(AdjacencyMatrix, LevelsAmount, LevelsAmount, "Adjacency Matrix");
+	PrintMatrix(AdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
+
+	ClearAdjacencyMatrix();
 }
 
 void USFDLevelsManager::PrintIncidenceMatrix_DEBUG()
@@ -179,7 +175,10 @@ void USFDLevelsManager::PrintIncidenceMatrix_DEBUG()
 	}
 	
 	FindMST();
-	PrintMatrix(IncidenceMatrix, LevelsAmount - 1, LevelsAmount, "Incidence Matrix");
+	PrintMatrix(IncidenceMatrix, RoomsAmount - 1, RoomsAmount, "Incidence Matrix");
+
+	ClearAdjacencyMatrix();
+	ClearIncidenceMatrix();
 }
 
 void USFDLevelsManager::PrintMatrix(const uint8* const* const InMatrix, const uint8 InSizeX, const uint8 InSizeY, const FString& InTitle)
@@ -226,14 +225,24 @@ void USFDLevelsManager::PrintMatrix(const uint8* const* const InMatrix, const ui
 
 void USFDLevelsManager::SpawnStartRoom()
 {
-	PendingLevelIndex = LevelIndexToStart;
-	CurrentLevelIndex = INDEX_NONE;
+	if(IsValid(PendingRoomDynamicInstance))
+	{
+		return;
+	}
 	
-	SpawnLevel(LevelInstance, FVector::ZeroVector, FRotator::ZeroRotator);
+	PendingRoomIndex = RoomIndexToStart;
+	CurrentRoomIndex = INDEX_NONE;
+	
+	SpawnRoom(RoomInstanceTemplate, FVector::ZeroVector, FRotator::ZeroRotator);
 }
 
 void USFDLevelsManager::SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader)
 {
+	if(IsValid(PendingRoomDynamicInstance))
+	{
+		return;
+	}
+	
 	if(!ensureAlways(IsValid(InFromRoomLoader)))
 	{
 		return;
@@ -255,23 +264,21 @@ void USFDLevelsManager::SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader
 	const uint8 LocalIndex = InFromRoomLoader->GetLocalIndex();
 	const FTransform& InNextLevelTransform = CurrentLevelCore->GetNextRoomTransformByLocalIndex(LocalIndex);
 
-	PendingLevelIndex = RoomToLoadIndex;
+	PendingRoomIndex = RoomToLoadIndex;
 	
-	SpawnLevel(LevelInstance, InNextLevelTransform.GetLocation(), InNextLevelTransform.GetRotation().Rotator());	
+	SpawnRoom(RoomInstanceTemplate, InNextLevelTransform.GetLocation(), InNextLevelTransform.GetRotation().Rotator());	
 }
 
 void USFDLevelsManager::GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex) const
 {
 	OutConnectedRoomsIndices.Reset(4);
 
-	const uint8 EdgesAmount = LevelsAmount - 1;
-	
-	for(uint8 i = 0; i < EdgesAmount; ++i)
+	for(uint8 i = 0; i < ConnectionsAmount; ++i)
 	{
 		const bool bIsConnectionExists = static_cast<bool>(IncidenceMatrix[i][InRoomIndex]);
 		if(bIsConnectionExists)
 		{
-			for(uint8 j = 0; j < LevelsAmount; ++j)
+			for(uint8 j = 0; j < RoomsAmount; ++j)
 			{
 				if(j == InRoomIndex)
 				{
@@ -286,21 +293,15 @@ void USFDLevelsManager::GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoom
 			}
 		}
 	}
+	
+	OutConnectedRoomsIndices.Sort();
 }
 
-void USFDLevelsManager::SpawnLevel(const TSoftObjectPtr<UWorld>& InLevelClass, const FVector& InLevelLocation, const FRotator& InLevelRotation)
+void USFDLevelsManager::SpawnRoom(const TSoftObjectPtr<UWorld>& InLevelClass, const FVector& InLevelLocation, const FRotator& InLevelRotation)
 {
-	if(IsValid(PendingLevelDynamicInstance))
+	if(IsValid(PendingRoomDynamicInstance))
 	{
 		return;
-		
-		// PendingLevelDynamicInstance->SetShouldBeLoaded(false);
-		// PendingLevelDynamicInstance->SetShouldBeVisible(false);
-		// PendingLevelDynamicInstance->SetIsRequestingUnloadAndRemoval(true);
-		//
-		// PendingLevelDynamicInstance->OnLevelShown.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
-		//
-		// PendingLevelDynamicInstance = nullptr;
 	}
 
 	UWorld* World = GetWorld();
@@ -310,31 +311,53 @@ void USFDLevelsManager::SpawnLevel(const TSoftObjectPtr<UWorld>& InLevelClass, c
 	}
 	
 	bool bIsSucceed = false;
-	PendingLevelDynamicInstance = ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(World, LevelInstance, FVector::ZeroVector, FRotator::ZeroRotator, bIsSucceed);
+	PendingRoomDynamicInstance = ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(World, RoomInstanceTemplate, FVector::ZeroVector, FRotator::ZeroRotator, bIsSucceed);
 	if(!ensureAlways(bIsSucceed)
-		|| !ensureAlways(IsValid(PendingLevelDynamicInstance)))
+		|| !ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
 		return;
 	}
 	
 	//PendingLevelDynamicInstance->OnLevelLoaded.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
-	PendingLevelDynamicInstance->OnLevelShown.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
+	PendingRoomDynamicInstance->OnLevelShown.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
 }
 
 void USFDLevelsManager::OnNextLevelLoaded()
 {
-	if(!ensureAlways(IsValid(PendingLevelDynamicInstance)))
+	if(!ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
 		return;
 	}
 
 	//PendingLevelDynamicInstance->OnLevelLoaded.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
-	PendingLevelDynamicInstance->OnLevelShown.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
+	PendingRoomDynamicInstance->OnLevelShown.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
 
-	PendingLevelDynamicInstance->SetShouldBeVisible(true);
-	PendingLevelDynamicInstance->SetShouldBeLoaded(true);
+	PrepareNextRoom();
+
+	TransportPlayerToNextLevel();
+
+	ClearPreviousRoom();
+
+	PreviousRoomIndex = CurrentRoomIndex;
+	CurrentRoomIndex = PendingRoomIndex;
+	PendingRoomIndex = INDEX_NONE;
 	
-	const ULevel* InNextLevel = PendingLevelDynamicInstance->GetLoadedLevel();
+	CurrentRoomDynamicInstance = PendingRoomDynamicInstance;
+	PendingRoomDynamicInstance = nullptr;
+}
+
+void USFDLevelsManager::PrepareNextRoom()
+{
+	if(!ensureAlways(IsValid(PendingRoomDynamicInstance))
+		|| !ensureAlways(PendingRoomIndex != INDEX_NONE))
+	{
+		return;
+	}
+	
+	PendingRoomDynamicInstance->SetShouldBeVisible(true);
+	PendingRoomDynamicInstance->SetShouldBeLoaded(true);
+
+	const ULevel* InNextLevel = PendingRoomDynamicInstance->GetLoadedLevel();
 
 	ASFDLevelCore* NextLevelCore = SFD::GetLevelCore(InNextLevel);
 	if(!ensureAlways(IsValid(NextLevelCore)))
@@ -342,29 +365,22 @@ void USFDLevelsManager::OnNextLevelLoaded()
 		return;
 	}
 
-	NextLevelCore->SetRoomIndex(PendingLevelIndex);
-	
-	TransportPlayer(NextLevelCore->GetPlayerStart());
-	
-	if(IsValid(CurrentLevelDynamicInstance))
-    {
-    	CurrentLevelDynamicInstance->SetShouldBeLoaded(false);
-    	CurrentLevelDynamicInstance->SetShouldBeVisible(false);
-    	CurrentLevelDynamicInstance->SetIsRequestingUnloadAndRemoval(true);
-		
-		CurrentLevelDynamicInstance = nullptr;
-    }
-
-	CurrentLevelIndex = PendingLevelIndex;
-	PendingLevelIndex = INDEX_NONE;
-	
-	CurrentLevelDynamicInstance = PendingLevelDynamicInstance;
-	PendingLevelDynamicInstance = nullptr;
+	NextLevelCore->SetRoomIndex(PendingRoomIndex);
 }
 
-void USFDLevelsManager::TransportPlayer(const APlayerStart* InPlayerStart)
+void USFDLevelsManager::ClearPreviousRoom()
 {
-	if(!ensureAlways(IsValid(InPlayerStart)))
+	if(IsValid(CurrentRoomDynamicInstance))
+	{
+		CurrentRoomDynamicInstance->SetShouldBeLoaded(false);
+		CurrentRoomDynamicInstance->SetShouldBeVisible(false);
+		CurrentRoomDynamicInstance->SetIsRequestingUnloadAndRemoval(true);
+	}
+}
+
+void USFDLevelsManager::TransportPlayerToNextLevel()
+{
+	if(!ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
 		return;
 	}
@@ -376,12 +392,48 @@ void USFDLevelsManager::TransportPlayer(const APlayerStart* InPlayerStart)
 	}
 	
 	const APlayerController* PlayerController = World->GetFirstPlayerController();
-	if(!ensureAlways(IsValid(PlayerController)))
+	if(!ensureAlways(IsValid(PlayerController))
+		|| !ensureAlways(IsValid(PlayerController->GetPawn())))
 	{
 		return;
 	}
 
-	PlayerController->GetPawn()->SetActorLocation(InPlayerStart->GetActorLocation());
-	PlayerController->GetPawn()->SetActorRotation(InPlayerStart->GetActorRotation());
+	const ULevel* NextRoomLevel = PendingRoomDynamicInstance->GetLoadedLevel();
+
+	const ASFDLevelCore* NextLevelCore = SFD::GetLevelCore(NextRoomLevel);
+	if(!ensureAlways(IsValid(NextLevelCore)))
+	{
+		return;
+	}
+	
+	FVector LocationToSpawnPlayer = FVector::ZeroVector;
+	FRotator RotatorToSpawnPlayer = FRotator::ZeroRotator;
+	
+	if(CurrentRoomIndex != INDEX_NONE)
+	{
+		ASFDNextRoomLoader* CurrentRoomLoaderInsidePendingRoom = NextLevelCore->GetNextRoomLoaderByRoomIndex(CurrentRoomIndex);
+		if(!ensureAlways(IsValid(CurrentRoomLoaderInsidePendingRoom)))
+		{
+			return;
+		}
+		
+		CurrentRoomLoaderInsidePendingRoom->BlockSpawnTillPlayerStepOut();
+		
+		LocationToSpawnPlayer = CurrentRoomLoaderInsidePendingRoom->GetLocationToSpawnPlayer();
+		RotatorToSpawnPlayer = CurrentRoomLoaderInsidePendingRoom->GetRotationToSpawnPlayer();
+	}
+	else
+	{
+		const APlayerStart* StartToSpawnPlayer = NextLevelCore->GetPlayerStart();  
+		if(!ensureAlways(IsValid(StartToSpawnPlayer)))
+		{
+			return;
+		}
+		
+		LocationToSpawnPlayer = StartToSpawnPlayer->GetActorLocation();
+		RotatorToSpawnPlayer = StartToSpawnPlayer->GetActorRotation();
+	}
+	
+	PlayerController->GetPawn()->TeleportTo(LocationToSpawnPlayer, RotatorToSpawnPlayer, false, true);
 }
 

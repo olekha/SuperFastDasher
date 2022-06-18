@@ -21,10 +21,12 @@ public:
 	// Sets default values for this actor's properties
 	ASFDLevelCore();
 
-	ASFDNextRoomLoader* GetNextRoomLoaderByLocalIndex(const uint8 InLocalIndexIndex) const;
-	
-	const FTransform& GetNextRoomTransformByLocalIndex(const uint8 InLocalIndexIndex) const;
+	ASFDNextRoomLoader* GetNextRoomLoaderByRoomIndex(const uint8 InRoomIndex) const;
+	ASFDNextRoomLoader* GetNextRoomLoaderByLocalIndex(const uint8 InLocalIndex) const;
 
+	const FTransform& GetNextRoomTransformByRoomIndex(const uint8 InRoomIndex) const;
+	const FTransform& GetNextRoomTransformByLocalIndex(const uint8 InLocalIndex) const;
+	
 	FORCEINLINE int8 GetRoomIndex() const
 	{
 		return RoomIndex;

@@ -182,6 +182,21 @@ float ASFDCharacter::PlayAnimMontage(UAnimMontage* AnimMontage, bool OnWholeBody
 	return Super::PlayAnimMontage(AnimMontage, InPlayRate, StartSectionName);
 }
 
+void ASFDCharacter::OnEnteredIntoRoomLoader()
+{
+	LastVelocityDirection = FVector::ZeroVector;
+
+	if(GetCharacterMovement() != nullptr)
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		//GetCharacterMovement()->DisableMovement();
+	}
+}
+
+void ASFDCharacter::OnStepOutFromRoomLoader()
+{
+}
+
 float ASFDCharacter::TakeDamage(float Damage, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	if (IsAbleToBlockHit(FVector::ZeroVector))
@@ -241,6 +256,11 @@ FRotator ASFDCharacter::CalculateRotationFromDirection() const
 	if(IsBlockInitiated())
 	{
 		return FRotator(0.0f, BlockDirection.Rotation().Yaw, 0.0f);
+	}
+
+	if(LastVelocityDirection.IsNearlyZero())
+	{
+		return GetActorRotation();
 	}
 	
 	return FRotator(0.0f, LastVelocityDirection.Rotation().Yaw, 0.0f);

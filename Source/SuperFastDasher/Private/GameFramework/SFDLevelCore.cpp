@@ -38,9 +38,22 @@ void ASFDLevelCore::BeginPlay()
 	}
 }
 
+ASFDNextRoomLoader* ASFDLevelCore::GetNextRoomLoaderByRoomIndex(const uint8 InRoomIndex) const
+{
+	ASFDNextRoomLoader* const * NextRoomLoader = NextRoomLoaders.FindByPredicate([InRoomIndex](const ASFDNextRoomLoader* RoomLoader){ return RoomLoader->GetRoomToLoadIndex() == InRoomIndex;});
+
+	if(NextRoomLoader == nullptr
+		|| !IsValid(*NextRoomLoader))
+	{
+		return nullptr;
+	}
+
+	return *NextRoomLoader;
+}
+
 ASFDNextRoomLoader* ASFDLevelCore::GetNextRoomLoaderByLocalIndex(const uint8 InLocalIndexIndex) const
 {
-	if(!ensureAlways(NextRoomLoaders.IsValidIndex(InLocalIndexIndex)))
+	if(NextRoomLoaders.IsValidIndex(InLocalIndexIndex))
 	{
 		return nullptr;
 	}
@@ -48,15 +61,32 @@ ASFDNextRoomLoader* ASFDLevelCore::GetNextRoomLoaderByLocalIndex(const uint8 InL
 	return NextRoomLoaders[InLocalIndexIndex];
 }
 
+const FTransform& ASFDLevelCore::GetNextRoomTransformByRoomIndex(const uint8 InRoomIndex) const
+{
+	const int32 RoomLoaderIndex = NextRoomLoaders.IndexOfByPredicate([InRoomIndex](const ASFDNextRoomLoader* RoomLoader){ return RoomLoader->GetRoomToLoadIndex() == InRoomIndex;});
+
+	if(RoomLoaderIndex == INDEX_NONE)
+	{
+		return FTransform::Identity;
+	}
+
+	if(!ensureAlways(RoomsSpawnPoints.IsValidIndex(RoomLoaderIndex)))
+	{
+		return FTransform::Identity;
+	}
+
+	return RoomsSpawnPoints[RoomLoaderIndex]->GetActorTransform();
+}
+
 const FTransform& ASFDLevelCore::GetNextRoomTransformByLocalIndex(const uint8 InLocalIndexIndex) const
 {
-	if(!ensureAlways(RoomsSpawnPoints.IsValidIndex(InLocalIndexIndex)))
+	if(RoomsSpawnPoints.IsValidIndex(InLocalIndexIndex))
  	{
  		return FTransform::Identity;
  	}
 
 	const AActor* RoomSpawnPoint = RoomsSpawnPoints[InLocalIndexIndex];
-	if(!ensureAlways(RoomSpawnPoint != nullptr))
+	if(!ensureAlways(IsValid(RoomSpawnPoint)))
 	{
 		return FTransform::Identity;
 	}
@@ -94,7 +124,7 @@ void ASFDLevelCore::UpdateNextRoomsLoaders()
 		return;
 	}
 	
-	TArray<uint8> ConnectedRooms;
+	static TArray<uint8> ConnectedRooms;
 	LevelsManager->GetAllConnectionsForRoom(ConnectedRooms, RoomIndex);
 
 	ensureAlways(ConnectedRooms.Num() <= 4);

@@ -20,6 +20,9 @@ ASFDNextRoomLoader::ASFDNextRoomLoader()
 	
 	NextRoomIndexTextComponent = CreateDefaultSubobject<UTextRenderComponent>(TEXT("NextRoomIndexTextComponent"));
 	NextRoomIndexTextComponent->SetupAttachment(RootComponent);
+
+	PlayerSpawnPointComponent = CreateDefaultSubobject<USceneComponent>("PlayerSpawnPointComponent");
+	PlayerSpawnPointComponent->SetupAttachment(RootComponent);
 }
 
 void ASFDNextRoomLoader::SetRoomToLoadIndex(const uint8 InRoomIndex)
@@ -39,7 +42,8 @@ void ASFDNextRoomLoader::BeginPlay()
 {
 	Super::BeginPlay();
 
-	BoxTrigerComponent->OnComponentBeginOverlap.AddUniqueDynamic(this, &ASFDNextRoomLoader::OnBoxComponentOverlapped);
+	BoxTrigerComponent->OnComponentBeginOverlap.AddUniqueDynamic(this, &ASFDNextRoomLoader::OnBoxComponentBeginOverlapped);
+	BoxTrigerComponent->OnComponentEndOverlap.AddUniqueDynamic(this, &ASFDNextRoomLoader::OnBoxComponentEndOverlapped);
 }
 
 void ASFDNextRoomLoader::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -49,13 +53,18 @@ void ASFDNextRoomLoader::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	BoxTrigerComponent->OnComponentBeginOverlap.RemoveAll(this);
 }
 
-void ASFDNextRoomLoader::OnBoxComponentOverlapped(UPrimitiveComponent* OverlappedComp, AActor* Other, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+void ASFDNextRoomLoader::OnBoxComponentBeginOverlapped(UPrimitiveComponent* OverlappedComp, AActor* Other, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if(!IsValid(Other) || !Other->IsA<ASFDCharacter>())
+	if(!IsValid(Other)
+		|| !Other->IsA<ASFDCharacter>()
+		|| SpawnDisabledTillEndOverlap)
 	{
 		return;
 	}
 
+	ASFDCharacter* Character = CastChecked<ASFDCharacter>(Other);
+	Character->OnEnteredIntoRoomLoader();
+	
 	UE_LOG(LogTemp, Error, TEXT("Try to load level %i"), RoomToLoadIndex);
 
 	USFDLevelsManager* LevelsManager =  SFD::GetLevelsManager(this);
@@ -63,6 +72,20 @@ void ASFDNextRoomLoader::OnBoxComponentOverlapped(UPrimitiveComponent* Overlappe
 	{
 		return;
 	}
-	
+		
 	LevelsManager->SpawnNextRoom(this);
+}
+
+void ASFDNextRoomLoader::OnBoxComponentEndOverlapped(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if(!IsValid(OtherActor)
+		|| !OtherActor->IsA<ASFDCharacter>())
+	{
+		return;
+	}
+
+	ASFDCharacter* Character = CastChecked<ASFDCharacter>(OtherActor);
+	Character->OnStepOutFromRoomLoader();
+	
+	SpawnDisabledTillEndOverlap = false;
 }
