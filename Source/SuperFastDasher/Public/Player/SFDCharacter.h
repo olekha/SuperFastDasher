@@ -41,7 +41,7 @@ public:
 
 	FORCEINLINE USFDVitalityComponent* GetVitalityComponent() const
 	{
-		return VitalityComponent;
+		return VitalityComponentNew;
 	}
 
 	void EndAttack();			
@@ -104,7 +104,7 @@ private:
 	UStaticMeshComponent* ShieldMesh;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
-	USFDVitalityComponent* VitalityComponent;
+	USFDVitalityComponent* VitalityComponentNew;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	USFDCombatManagerComponent* CombatManagerComponent;

@@ -44,7 +44,7 @@ void USFDCombatManagerComponent::TickComponent(float DeltaTime, ELevelTick TickT
 	UpdateCombatState();
 
 	if (GEngine)
-		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Red, AttackStateToString(CurrentAttackState), true, FVector2D(1.5f, 1.5f));
+		GEngine->AddOnScreenDebugMessage(-1, 0.0f, FColor::Red, SFD::AttackStateToString(CurrentAttackState), true, FVector2D(1.5f, 1.5f));
 }
 
 void USFDCombatManagerComponent::UpdateCombatState()

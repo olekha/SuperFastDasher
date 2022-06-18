@@ -5,6 +5,10 @@
 #include "CoreMinimal.h"
 #include "SuperFastDasher.generated.h"
 
+class ASFDLevelCore;
+class USFDLevelsManager;
+class ASFDGameMode;
+
 USTRUCT()
 struct FSFDTimeSnapshot
 {
@@ -77,4 +81,14 @@ enum class ESFDInputPriority : uint8
 	Max				UMETA(Hidden)
 };
 
-FString AttackStateToString(ESFDAttackState InAttackState);
+namespace SFD
+{
+	FString AttackStateToString(ESFDAttackState InAttackState);
+
+	ASFDLevelCore* GetLevelCore(const ULevel* InLevel);
+	
+	ASFDGameMode* GetGameMode(const UObject* InWorldContext);
+	
+	USFDLevelsManager* GetLevelsManager(const UObject* InWorldContext);
+}
+

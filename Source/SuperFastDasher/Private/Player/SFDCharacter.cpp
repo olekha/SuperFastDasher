@@ -52,7 +52,7 @@ ASFDCharacter::ASFDCharacter(const FObjectInitializer& ObjectInitializer)
 	ShieldMesh->SetupAttachment(GetMesh(), "Shield_Socket");
 	ShieldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	VitalityComponent = CreateDefaultSubobject<USFDVitalityComponent>("VitalityComponent");
+	VitalityComponentNew = CreateDefaultSubobject<USFDVitalityComponent>("VitalityComponent");
 
 	CombatManagerComponent = CreateDefaultSubobject<USFDCombatManagerComponent>("CombatManagerComponent");
 }
@@ -216,9 +216,9 @@ float ASFDCharacter::TakeDamage(float Damage, FDamageEvent const& DamageEvent, A
 		GEngine->AddOnScreenDebugMessage(0, 2.0f, FColor::Blue, FString("DAMAGE TAKEN!!"));
 	}
 
-	if (VitalityComponent != nullptr)
+	if (VitalityComponentNew != nullptr)
 	{
-		VitalityComponent->AddHealth(Damage * -1.0f);
+		VitalityComponentNew->AddHealth(Damage * -1.0f);
 	}
 
 	EndAttack();
@@ -279,7 +279,7 @@ void ASFDCharacter::StartBlock()
 
 void ASFDCharacter::EndBlock()
 {
-	if (!IsInBlock())
+	if (!LastBlockSnapshot.IsValid())
 	{
 		return;
 	}
@@ -295,12 +295,12 @@ void ASFDCharacter::EndBlock()
 
 bool ASFDCharacter::IsTired() const
 {
-	if (VitalityComponent == nullptr)
+	if (VitalityComponentNew == nullptr)
 	{
 		return false;
 	}
 
-	return VitalityComponent->GetCurrentStamina() <= 0;
+	return VitalityComponentNew->GetCurrentStamina() <= 0;
 }
 
 bool ASFDCharacter::IsInBlock() const
