@@ -21,35 +21,37 @@ public:
 
 	USFDLevelsManager();
 	virtual ~USFDLevelsManager();
-	
+
+#if WITH_EDITOR
 	UFUNCTION(BlueprintCallable)
 	void PrintAdjacencyMatrix_DEBUG();
-	
 	UFUNCTION(BlueprintCallable)
 	void PrintIncidenceMatrix_DEBUG();
-
-	void PrintMatrix(const uint8 * const * const InMatrix, const uint8 InSizeX, const uint8 InSizeY, const FString& InTitle);
+#endif
 	
 	void SpawnStartRoom();
-
 	void SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader);
 
 	void GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex) const;
+	static void GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex, const uint8*const *const InIncidenceMatrix, const uint8 InConnectionsAmount, const uint8 InRoomsAmount);
+	
+	FORCEINLINE int8 GetPreviousRoomIndex() const;
+	FORCEINLINE int8 GetCurrentRoomIndex() const;
+	FORCEINLINE int8 GetPendingRoomIndex() const;
 
-	FORCEINLINE int8 GetPreviousRoomIndex() const
-	{
-		return PreviousRoomIndex;
-	}
+	FORCEINLINE uint8 GetRoomsAmount() const;
+	FORCEINLINE uint8 GetConnectionsAmount() const;
+
+	FORCEINLINE const uint8*const *const GetIncidenceMatrix() const;
 	
-	FORCEINLINE int8 GetCurrentRoomIndex() const
-	{
-		return CurrentRoomIndex;
-	}
-	
-	FORCEINLINE int8 GetPendingRoomIndex() const
-	{
-		return PendingRoomIndex;
-	}
+	static void InitAdjacency(uint8**& OutAdjacencyMatrixPtrPtr, const uint8 InDimension);
+
+	// Find the minimum spanning tree and fill an Incidence Matrix
+	static void FindMST(uint8**& OutIncidenceMatrixPtrPtr, const uint8*const *const InAdjacencyMatrixPtrPtr, const uint8 InAdjacencyMatrixDimension);
+
+	static void ClearMatrix(uint8**& InAdjacencyMatrixPtrPtr, const uint8 InDimensionY);
+
+	static void PrintMatrix(const uint8 * const * const InMatrix, const uint8 InSizeX, const uint8 InSizeY, const FString& InTitle);
 	
 private:
 		
@@ -58,18 +60,12 @@ private:
 	void PrepareNextRoom();
 	void ClearPreviousRoom();
 	
-	void InitAdjacency();
-
-	// Find the minimum spanning tree
-	void FindMST();
-
+	void ArrangeRooms();
+	
 	UFUNCTION()
 	void OnNextLevelLoaded();
 
 	void TransportPlayerToNextLevel();
-
-	void ClearAdjacencyMatrix();
-	void ClearIncidenceMatrix();
 	
 private:
 	
@@ -97,3 +93,33 @@ private:
 	//@TODO temp, should be moved into custom ULevelStreamingDynamic
 	int8 PendingRoomIndex = INDEX_NONE;
 };
+
+FORCEINLINE int8 USFDLevelsManager::GetPreviousRoomIndex() const
+{
+	return PreviousRoomIndex;
+}
+	
+FORCEINLINE int8 USFDLevelsManager::GetCurrentRoomIndex() const
+{
+	return CurrentRoomIndex;
+}
+	
+FORCEINLINE int8 USFDLevelsManager::GetPendingRoomIndex() const
+{
+	return PendingRoomIndex;
+}
+
+FORCEINLINE uint8 USFDLevelsManager::GetRoomsAmount() const
+{
+	return RoomsAmount;
+}
+
+FORCEINLINE uint8 USFDLevelsManager::GetConnectionsAmount() const
+{
+	return ConnectionsAmount;
+}
+
+FORCEINLINE const uint8*const *const USFDLevelsManager::GetIncidenceMatrix() const
+{
+	return IncidenceMatrix;
+}

@@ -14,90 +14,83 @@
 
 USFDLevelsManager::USFDLevelsManager()
 {
-	RoomsAmount = 10;
+	RoomsAmount = 12;
 	ConnectionsAmount = RoomsAmount - 1;
 	
-	InitAdjacency();
-	FindMST();
+	USFDLevelsManager::InitAdjacency(AdjacencyMatrix, RoomsAmount);
+	USFDLevelsManager::FindMST(IncidenceMatrix, AdjacencyMatrix, RoomsAmount);
 
-	PrintMatrix(AdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
-	PrintMatrix(IncidenceMatrix, ConnectionsAmount, RoomsAmount, "Incidence Matrix");
+	USFDLevelsManager::PrintMatrix(AdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
+	USFDLevelsManager::PrintMatrix(IncidenceMatrix, ConnectionsAmount, RoomsAmount, "Incidence Matrix");
 }
 
 USFDLevelsManager::~USFDLevelsManager()
 {
-	ClearAdjacencyMatrix();
-	ClearIncidenceMatrix();
+	USFDLevelsManager::ClearMatrix(AdjacencyMatrix, RoomsAmount);
+	USFDLevelsManager::ClearMatrix(IncidenceMatrix, RoomsAmount);
 }
 
-void USFDLevelsManager::ClearAdjacencyMatrix()
+void USFDLevelsManager::ClearMatrix(uint8**& InMatrixPtrPtr, const uint8 InDimensionY)
 {
-	if(AdjacencyMatrix != nullptr)
-	{
-		for(uint8 i = 0; i < RoomsAmount; ++i)
-		{
-			delete[] AdjacencyMatrix[i];
-		}
-		delete[] AdjacencyMatrix;
-	}
-}
-
-void USFDLevelsManager::ClearIncidenceMatrix()
-{
-	if(IncidenceMatrix != nullptr)
-	{
-		for(uint8 i = 0; i < RoomsAmount - 1; ++i)
-		{
-			delete[] IncidenceMatrix[i];
-		}
-		delete[] IncidenceMatrix;
-	}
-}
-
-void USFDLevelsManager::InitAdjacency()
-{
-	ClearAdjacencyMatrix();
-	
-	AdjacencyMatrix = new uint8*[RoomsAmount];
-    for(uint8 i = 0; i < RoomsAmount; ++i)
-    {
-    	AdjacencyMatrix[i] = new uint8[RoomsAmount];
-    }
-
-	for(uint8 i = 0; i < RoomsAmount; ++i)
-	{
-		for(uint8 j = i; j < RoomsAmount; ++j)
-		{
-			if(i == j)
-			{
-				AdjacencyMatrix[j][i] = 0;
-				continue;
-			}
-			
-			const uint8 Weight = FMath::RandRange(1, 20);
-			AdjacencyMatrix[j][i] = Weight;
-			AdjacencyMatrix[i][j] = Weight;
-		}
-	}
-}
-
-void USFDLevelsManager::FindMST()
-{
-	if(AdjacencyMatrix == nullptr)
+	if(InMatrixPtrPtr == nullptr
+		|| (*InMatrixPtrPtr) == nullptr)
 	{
 		return;
 	}
 	
-	ClearIncidenceMatrix();
+    for(uint8 i = 0; i < InDimensionY; ++i)
+    {
+    	delete[] InMatrixPtrPtr[i];
+    }
+	
+    delete[] InMatrixPtrPtr;
+}
 
+void USFDLevelsManager::InitAdjacency(uint8**& OutAdjacencyMatrixPtrPtr, const uint8 InDimension)
+{
+	USFDLevelsManager::ClearMatrix(OutAdjacencyMatrixPtrPtr, InDimension);
+	
+	OutAdjacencyMatrixPtrPtr = new uint8*[InDimension];
+    for(uint8 i = 0; i < InDimension; ++i)
+    {
+    	OutAdjacencyMatrixPtrPtr[i] = new uint8[InDimension];
+    }
+
+	for(uint8 i = 0; i < InDimension; ++i)
+	{
+		for(uint8 j = i; j < InDimension; ++j)
+		{
+			if(i == j)
+			{
+				OutAdjacencyMatrixPtrPtr[j][i] = 0;
+				continue;
+			}
+			
+			const uint8 Weight = FMath::RandRange(1, 20);
+			OutAdjacencyMatrixPtrPtr[j][i] = Weight;
+			OutAdjacencyMatrixPtrPtr[i][j] = Weight;
+		}
+	}
+}
+
+void USFDLevelsManager::FindMST(uint8**& OutIncidenceMatrixPtrPtr, const uint8* const* const InAdjacencyMatrixPtrPtr, const uint8 InAdjacencyMatrixDimension)
+{
+	if(InAdjacencyMatrixPtrPtr == nullptr
+		|| (*InAdjacencyMatrixPtrPtr) == nullptr)
+	{
+		return;
+	}
+	
 	TArray<uint8> Tree;
-	Tree.Reserve(RoomsAmount);
-	Tree.Add(FMath::RandRange(0, RoomsAmount - 1));
+	Tree.Reserve(InAdjacencyMatrixDimension);
+	Tree.Add(FMath::RandRange(0, InAdjacencyMatrixDimension - 1));
 
+	const uint8 ConnectionsAmount = InAdjacencyMatrixDimension - 1;
+	
 	TArray<TPair<uint8, uint8>> Edges;
 	Edges.Reserve(ConnectionsAmount);
 	
-	while(Tree.Num() < RoomsAmount)
+	while(Tree.Num() < InAdjacencyMatrixDimension)
 	{
 		TPair<int8, int8> CheapestEdge = { INDEX_NONE, INDEX_NONE };
 		uint8 CheapestEdgeWeight = MAX_uint8;
@@ -105,14 +98,14 @@ void USFDLevelsManager::FindMST()
 		for(uint8 i = 0; i < Tree.Num(); ++i)
 		{
 			const uint8 SearchedVertex = Tree[i];
-			for(uint8 j = 0; j < RoomsAmount; ++j)
+			for(uint8 j = 0; j < InAdjacencyMatrixDimension; ++j)
 			{
 				if(Tree.Contains(j))
 				{
 					continue;
 				}
 			
-				const uint8 CurrentWeight = AdjacencyMatrix[j][SearchedVertex];
+				const uint8 CurrentWeight = InAdjacencyMatrixPtrPtr[j][SearchedVertex];
 				if(CurrentWeight == 0)
 				{
 					continue;
@@ -132,18 +125,20 @@ void USFDLevelsManager::FindMST()
 			Edges.Add(CheapestEdge);
 		}
 	}
+
+	USFDLevelsManager::ClearMatrix(OutIncidenceMatrixPtrPtr, InAdjacencyMatrixDimension);
 	
-	IncidenceMatrix = new uint8*[RoomsAmount];
-	for(uint8 i = 0; i < RoomsAmount; ++i)
+	OutIncidenceMatrixPtrPtr = new uint8*[InAdjacencyMatrixDimension];
+	for(uint8 i = 0; i < InAdjacencyMatrixDimension; ++i)
 	{
-		IncidenceMatrix[i] = new uint8[ConnectionsAmount];
+		OutIncidenceMatrixPtrPtr[i] = new uint8[ConnectionsAmount];
 	}
 
-	for(uint8 i = 0; i < RoomsAmount; ++i)
+	for(uint8 i = 0; i < InAdjacencyMatrixDimension; ++i)
 	{
 		for(uint8 j = 0; j < ConnectionsAmount; ++j)
 		{
-			IncidenceMatrix[j][i] = 0;
+			OutIncidenceMatrixPtrPtr[j][i] = 0;
 		}
 	}
 	
@@ -151,35 +146,41 @@ void USFDLevelsManager::FindMST()
 	{
 		const TPair<uint8, uint8>& Edge = Edges[i];
 		
-		IncidenceMatrix[i][Edge.Key] = 1;
-		IncidenceMatrix[i][Edge.Value] = 1;
+		OutIncidenceMatrixPtrPtr[i][Edge.Key] = 1;
+		OutIncidenceMatrixPtrPtr[i][Edge.Value] = 1;
 	}
 }
 
+void USFDLevelsManager::ArrangeRooms()
+{
+	TArray<uint8> Connections;
+	GetAllConnectionsForRoom(Connections, RoomIndexToStart);
+}
+
+#if WITH_EDITOR
 void USFDLevelsManager::PrintAdjacencyMatrix_DEBUG()
 {
-	InitAdjacency();
-	PrintMatrix(AdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
+	uint8** DebugAdjacencyMatrix = nullptr;
+	USFDLevelsManager::InitAdjacency(DebugAdjacencyMatrix, RoomsAmount);
+	USFDLevelsManager::PrintMatrix(DebugAdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
 
-	ClearAdjacencyMatrix();
+	USFDLevelsManager::ClearMatrix(DebugAdjacencyMatrix, RoomsAmount);
 }
 
 void USFDLevelsManager::PrintIncidenceMatrix_DEBUG()
 {
-	PrintAdjacencyMatrix_DEBUG();
-	
-	if(AdjacencyMatrix == nullptr)
-	{
-		UE_LOG(LogTemp, Error, TEXT("No Adjacency Matrix Provided"));
-		return;
-	}
-	
-	FindMST();
-	PrintMatrix(IncidenceMatrix, RoomsAmount - 1, RoomsAmount, "Incidence Matrix");
+	uint8** DebugAdjacencyMatrix = nullptr;
+	USFDLevelsManager::InitAdjacency(DebugAdjacencyMatrix, RoomsAmount);
+	USFDLevelsManager::PrintMatrix(DebugAdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
 
-	ClearAdjacencyMatrix();
-	ClearIncidenceMatrix();
+	uint8** DebugIncidenceMatrix = nullptr;
+	USFDLevelsManager::FindMST(DebugIncidenceMatrix, DebugAdjacencyMatrix, RoomsAmount);
+	USFDLevelsManager::PrintMatrix(DebugIncidenceMatrix, RoomsAmount - 1, RoomsAmount, "Incidence Matrix");
+
+	USFDLevelsManager::ClearMatrix(DebugAdjacencyMatrix, RoomsAmount);
+	USFDLevelsManager::ClearMatrix(DebugIncidenceMatrix, RoomsAmount);
 }
+#endif
 
 void USFDLevelsManager::PrintMatrix(const uint8* const* const InMatrix, const uint8 InSizeX, const uint8 InSizeY, const FString& InTitle)
 {
@@ -271,21 +272,33 @@ void USFDLevelsManager::SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader
 
 void USFDLevelsManager::GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex) const
 {
-	OutConnectedRoomsIndices.Reset(4);
+	USFDLevelsManager::GetAllConnectionsForRoom(OutConnectedRoomsIndices, InRoomIndex, IncidenceMatrix, ConnectionsAmount, RoomsAmount);
+}
 
-	for(uint8 i = 0; i < ConnectionsAmount; ++i)
+void USFDLevelsManager::GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex,
+	const uint8* const* const InIncidenceMatrix, const uint8 InConnectionsAmount, const uint8 InRoomsAmount)
+{
+	OutConnectedRoomsIndices.Reset(4);
+	
+	if(InIncidenceMatrix == nullptr
+		|| (*InIncidenceMatrix) == nullptr)
 	{
-		const bool bIsConnectionExists = static_cast<bool>(IncidenceMatrix[i][InRoomIndex]);
+		return;
+	}
+
+	for(uint8 i = 0; i < InConnectionsAmount; ++i)
+	{
+		const bool bIsConnectionExists = static_cast<bool>(InIncidenceMatrix[i][InRoomIndex]);
 		if(bIsConnectionExists)
 		{
-			for(uint8 j = 0; j < RoomsAmount; ++j)
+			for(uint8 j = 0; j < InRoomsAmount; ++j)
 			{
 				if(j == InRoomIndex)
 				{
 					continue;
 				}
 				
-				const bool bIsAlsoConnected = static_cast<bool>(IncidenceMatrix[i][j]);
+				const bool bIsAlsoConnected = static_cast<bool>(InIncidenceMatrix[i][j]);
 				if(bIsAlsoConnected)
 				{
 					OutConnectedRoomsIndices.Add(j);
@@ -436,4 +449,3 @@ void USFDLevelsManager::TransportPlayerToNextLevel()
 	
 	PlayerController->GetPawn()->TeleportTo(LocationToSpawnPlayer, RotatorToSpawnPlayer, false, true);
 }
-

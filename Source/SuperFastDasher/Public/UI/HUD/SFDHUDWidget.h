@@ -6,7 +6,7 @@
 #include "Blueprint/UserWidget.h"
 #include "SFDHUDWidget.generated.h"
 
-UCLASS()
+UCLASS(HideDropdown)
 class SUPERFASTDASHER_API USFDHUDWidget : public UUserWidget
 {
 	GENERATED_BODY()

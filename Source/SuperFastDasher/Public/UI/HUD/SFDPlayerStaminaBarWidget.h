@@ -9,7 +9,7 @@
 class UProgressBar;
 class USFDVitalityComponent;
 
-UCLASS()
+UCLASS(HideDropdown)
 class SUPERFASTDASHER_API USFDPlayerStaminaBarWidget : public UUserWidget
 {
 	GENERATED_BODY()
