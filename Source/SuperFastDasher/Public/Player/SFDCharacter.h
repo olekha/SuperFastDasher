@@ -15,6 +15,8 @@ class USFDVitalityComponent;
 class USFDCombatManagerComponent;
 struct FSFDMove;
 
+DECLARE_EVENT(ASFDCharacter, FPlayerTeleportedDelegate);
+
 UCLASS()
 class SUPERFASTDASHER_API ASFDCharacter : public ACharacter
 {
@@ -32,22 +34,10 @@ public:
 	// Sets default values for this character's properties
 	
 	bool IsAbleToBlockHit(const FVector& InHitDirection) const;
-	FORCEINLINE bool IsBlockInitiated() const
-	{
-		return LastBlockSnapshot.IsValid();
-	}
-	
+	FORCEINLINE bool IsBlockInitiated() const;
 	bool IsAttacking() const;
-
-	FORCEINLINE UStaticMeshComponent* GetWeaponMeshComponent() const 
-	{ 
-		return WeaponMesh;
-	}
-
-	FORCEINLINE USFDVitalityComponent* GetVitalityComponent() const
-	{
-		return SFDVitalityComponent;
-	}
+	FORCEINLINE UStaticMeshComponent* GetWeaponMeshComponent() const;
+	FORCEINLINE USFDVitalityComponent* GetVitalityComponent() const;
 
 	void EndAttack();			
 
@@ -62,6 +52,11 @@ public:
 	void OnEnteredIntoRoomLoader();
 	void OnStepOutFromRoomLoader();
 	
+	void StartPreTeleportationTimer(const FTransform& InTeleportationTransform);
+	void TeleportPlayer(const FTransform& InTeleportationTransform);
+	
+	FORCEINLINE FPlayerTeleportedDelegate& GetOnPlayerTeleportedDelegate();	
+	FTransform GetCameraTransform() const;
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
@@ -86,17 +81,30 @@ private:
 
 	void HandleMeshRotationTowardsDirection(const float DeltaSeconds);
 	void HandleMovementSpeed();
+	
+	void StartPostTeleportationTimer();
+
+	UFUNCTION()
+	void OnPreTeleportationTimerExpired(const FTransform& InTeleportationTransform);
+
+	UFUNCTION()
+	void OnPostTeleportationTimerExpired();
 
 private:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float PostTeleportationDelayTime = 2.0f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float PreTeleportationDelayTime = 2.0f;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float DashVelocity = 200.0f;
 
-	UPROPERTY(Transient)
-	FSFDTimeSnapshot LastBlockSnapshot;
-	
-	UPROPERTY(Transient)
-	FVector BlockDirection = FVector::ZeroVector;
-	
-	UPROPERTY(Transient)
-	FVector LastVelocityDirection = FVector::ZeroVector;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	float RotationInterpolationSpeed = 5.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	bool bDrawDebug = true;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* CameraComponent;
@@ -115,19 +123,44 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components", meta = (AllowPrivateAccess = "true"))
 	USFDCombatManagerComponent* CombatManagerComponent;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float DashVelocity = 200.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	float RotationInterpolationSpeed = 5.0f;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
-	bool bDrawDebug = true;
-
+	
+	UPROPERTY(Transient)
+	FSFDTimeSnapshot LastBlockSnapshot;
+	
+	UPROPERTY(Transient)
+	FVector BlockDirection = FVector::ZeroVector;
+	
+	UPROPERTY(Transient)
+	FVector LastVelocityDirection = FVector::ZeroVector;
+	
 	UPROPERTY(Transient)
 	bool bIsAttacking_Primary = false;
 
 	UPROPERTY(Transient)
 	bool bIsAttacking_Secondary = false;
+
+	UPROPERTY(Transient)
+	FTimerHandle PrePostTeleportationTimerHandle;
+	
+	FPlayerTeleportedDelegate OnPlayerTeleported;	
 };
+
+FORCEINLINE bool ASFDCharacter::IsBlockInitiated() const
+{
+	return LastBlockSnapshot.IsValid();
+}
+
+FORCEINLINE UStaticMeshComponent* ASFDCharacter::GetWeaponMeshComponent() const 
+{ 
+	return WeaponMesh;
+}
+
+FORCEINLINE USFDVitalityComponent* ASFDCharacter::GetVitalityComponent() const
+{
+	return SFDVitalityComponent;
+}
+
+FORCEINLINE FPlayerTeleportedDelegate& ASFDCharacter::GetOnPlayerTeleportedDelegate()
+{
+	return OnPlayerTeleported;
+}

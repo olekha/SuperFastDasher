@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Math/TransformCalculus3D.h"
 #include "SFDNextRoomLoader.generated.h"
 
 class UBoxComponent;
@@ -33,16 +34,11 @@ public:
 		return LocalIndex;
 	}
 
-	FORCEINLINE FVector GetLocationToSpawnPlayer() const
+	FORCEINLINE FTransform GetTransformToSpawnPlayer() const
 	{
-		return PlayerSpawnPointComponent->GetComponentLocation();
+		return FTransform(GetActorQuat(), PlayerSpawnPointComponent->GetComponentLocation(), FVector::OneVector); ;
 	}
 	
-	FORCEINLINE FRotator GetRotationToSpawnPlayer() const
-	{
-		return GetActorRotation();
-	}
-
 	FORCEINLINE void BlockSpawnTillPlayerStepOut()
 	{
 		SpawnDisabledTillEndOverlap = true;

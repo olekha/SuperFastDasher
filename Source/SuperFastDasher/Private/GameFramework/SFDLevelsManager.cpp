@@ -4,13 +4,14 @@
 #include "GameFramework/SFDLevelsManager.h"
 #include "GameFramework/SFDNextRoomLoader.h"
 #include "SuperFastDasher/SuperFastDasher.h"
+#include "Player/SFDCharacter.h"
 
 #include "Engine/LevelStreamingDynamic.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SFDLevelCore.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetTextLibrary.h"
-#include "Player/SFDCharacter.h"
+#include "Camera/CameraActor.h"
 
 USFDLevelsManager::USFDLevelsManager()
 {
@@ -233,6 +234,7 @@ void USFDLevelsManager::SpawnStartRoom()
 	
 	PendingRoomIndex = RoomIndexToStart;
 	CurrentRoomIndex = INDEX_NONE;
+	bIsStartRoom = true;
 	
 	SpawnRoom(RoomInstanceTemplate, FVector::ZeroVector, FRotator::ZeroRotator);
 }
@@ -266,6 +268,7 @@ void USFDLevelsManager::SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader
 	const FTransform& InNextLevelTransform = CurrentLevelCore->GetNextRoomTransformByLocalIndex(LocalIndex);
 
 	PendingRoomIndex = RoomToLoadIndex;
+	bIsStartRoom = false;
 	
 	SpawnRoom(RoomInstanceTemplate, InNextLevelTransform.GetLocation(), InNextLevelTransform.GetRotation().Rotator());	
 }
@@ -324,7 +327,7 @@ void USFDLevelsManager::SpawnRoom(const TSoftObjectPtr<UWorld>& InLevelClass, co
 	}
 	
 	bool bIsSucceed = false;
-	PendingRoomDynamicInstance = ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(World, RoomInstanceTemplate, FVector::ZeroVector, FRotator::ZeroRotator, bIsSucceed);
+	PendingRoomDynamicInstance = ULevelStreamingDynamic::LoadLevelInstanceBySoftObjectPtr(World, RoomInstanceTemplate, InLevelLocation, InLevelRotation, bIsSucceed);
 	if(!ensureAlways(bIsSucceed)
 		|| !ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
@@ -335,7 +338,7 @@ void USFDLevelsManager::SpawnRoom(const TSoftObjectPtr<UWorld>& InLevelClass, co
 	PendingRoomDynamicInstance->OnLevelShown.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
 }
 
-void USFDLevelsManager::OnNextLevelLoaded()
+void USFDLevelsManager::OnNextLevelLoaded(/*const bool bIsFirstRoom*/)
 {
 	if(!ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
@@ -347,16 +350,39 @@ void USFDLevelsManager::OnNextLevelLoaded()
 
 	PrepareNextRoom();
 
-	TransportPlayerToNextLevel();
-
-	ClearPreviousRoom();
-
-	PreviousRoomIndex = CurrentRoomIndex;
-	CurrentRoomIndex = PendingRoomIndex;
-	PendingRoomIndex = INDEX_NONE;
+	if(bIsStartRoom)
+	{
+		TransportPlayerToNextLevel(bIsStartRoom);
+		return;
+	}
 	
-	CurrentRoomDynamicInstance = PendingRoomDynamicInstance;
-	PendingRoomDynamicInstance = nullptr;
+	ACameraActor* TransitionCamera = SFD::GetCameraActorForTranitionBetweenRooms(this);
+	if(!ensureAlways(IsValid(TransitionCamera)))
+	{
+		TransportPlayerToNextLevel(bIsStartRoom);
+		return;
+	}
+	
+	APlayerController* PlayerController = SFD::GetPlayerController(this);
+	if(!ensureAlways(IsValid(PlayerController)))
+	{
+		return;
+	}
+
+	//@TODO implement correct view point location and rotation retrieving 
+	{
+		ASFDCharacter* Character = SFD::GetCharacter(this);
+		if(!ensureAlways(IsValid(PlayerController)))
+		{
+			return;
+		}
+
+		TransitionCamera->SetActorTransform(Character->GetCameraTransform());
+	}
+	
+	PlayerController->SetViewTarget(TransitionCamera,FViewTargetTransitionParams());
+
+	TransportPlayerToNextLevel(bIsStartRoom);
 }
 
 void USFDLevelsManager::PrepareNextRoom()
@@ -391,26 +417,19 @@ void USFDLevelsManager::ClearPreviousRoom()
 	}
 }
 
-void USFDLevelsManager::TransportPlayerToNextLevel()
+void USFDLevelsManager::TransportPlayerToNextLevel(const bool bSkipPreTeleportationDelay /*= false*/)
 {
 	if(!ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
 		return;
 	}
 	
-	const UWorld* World = GetWorld();
-	if(!ensureAlways(IsValid(World)))
+	ASFDCharacter* Character = SFD::GetCharacter(this);
+	if(!ensureAlways(IsValid(Character)))
 	{
 		return;
 	}
 	
-	const APlayerController* PlayerController = World->GetFirstPlayerController();
-	if(!ensureAlways(IsValid(PlayerController))
-		|| !ensureAlways(IsValid(PlayerController->GetPawn())))
-	{
-		return;
-	}
-
 	const ULevel* NextRoomLevel = PendingRoomDynamicInstance->GetLoadedLevel();
 
 	const ASFDLevelCore* NextLevelCore = SFD::GetLevelCore(NextRoomLevel);
@@ -419,8 +438,7 @@ void USFDLevelsManager::TransportPlayerToNextLevel()
 		return;
 	}
 	
-	FVector LocationToSpawnPlayer = FVector::ZeroVector;
-	FRotator RotatorToSpawnPlayer = FRotator::ZeroRotator;
+	FTransform TransformToSpawnPlayer = FTransform::Identity;
 	
 	if(CurrentRoomIndex != INDEX_NONE)
 	{
@@ -432,8 +450,7 @@ void USFDLevelsManager::TransportPlayerToNextLevel()
 		
 		CurrentRoomLoaderInsidePendingRoom->BlockSpawnTillPlayerStepOut();
 		
-		LocationToSpawnPlayer = CurrentRoomLoaderInsidePendingRoom->GetLocationToSpawnPlayer();
-		RotatorToSpawnPlayer = CurrentRoomLoaderInsidePendingRoom->GetRotationToSpawnPlayer();
+		TransformToSpawnPlayer = CurrentRoomLoaderInsidePendingRoom->GetTransformToSpawnPlayer();
 	}
 	else
 	{
@@ -443,9 +460,59 @@ void USFDLevelsManager::TransportPlayerToNextLevel()
 			return;
 		}
 		
-		LocationToSpawnPlayer = StartToSpawnPlayer->GetActorLocation();
-		RotatorToSpawnPlayer = StartToSpawnPlayer->GetActorRotation();
+		TransformToSpawnPlayer = StartToSpawnPlayer->GetActorTransform();
+	}
+
+	if(!Character->GetOnPlayerTeleportedDelegate().IsBound())
+	{
+		Character->GetOnPlayerTeleportedDelegate().AddUObject(this, &USFDLevelsManager::OnPlayerTransportationFinished);
+	}
+
+	if(bSkipPreTeleportationDelay)
+	{
+		Character->TeleportPlayer(TransformToSpawnPlayer);
+	}
+	else
+	{
+		Character->StartPreTeleportationTimer(TransformToSpawnPlayer);
+	}
+}
+
+void USFDLevelsManager::OnPlayerTransportationFinished()
+{
+	ASFDCharacter* Character = SFD::GetCharacter(this);
+	if(!ensureAlways(IsValid(Character)))
+	{
+		return;
+	}
+
+	APlayerController* PlayerController = SFD::GetPlayerController(this);
+	if(!ensureAlways(IsValid(PlayerController)))
+	{
+		return;
+	}
+
+	if(PlayerController->GetViewTarget() != Character)
+	{
+		FViewTargetTransitionParams param;
+		param.BlendTime = TransitionBetweenRoomsCameraBlendTime;
+			
+		PlayerController->SetViewTarget(Character, param);
 	}
 	
-	PlayerController->GetPawn()->TeleportTo(LocationToSpawnPlayer, RotatorToSpawnPlayer, false, true);
+	if(Character->GetOnPlayerTeleportedDelegate().IsBound())
+	{
+		Character->GetOnPlayerTeleportedDelegate().RemoveAll(this);
+	}
+
+	ClearPreviousRoom();
+
+    PreviousRoomIndex = CurrentRoomIndex;
+    CurrentRoomIndex = PendingRoomIndex;
+    PendingRoomIndex = INDEX_NONE;
+    
+    CurrentRoomDynamicInstance = PendingRoomDynamicInstance;
+    PendingRoomDynamicInstance = nullptr;
+
+	
 }

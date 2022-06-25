@@ -80,7 +80,7 @@ const FTransform& ASFDLevelCore::GetNextRoomTransformByRoomIndex(const uint8 InR
 
 const FTransform& ASFDLevelCore::GetNextRoomTransformByLocalIndex(const uint8 InLocalIndexIndex) const
 {
-	if(RoomsSpawnPoints.IsValidIndex(InLocalIndexIndex))
+	if(!RoomsSpawnPoints.IsValidIndex(InLocalIndexIndex))
  	{
  		return FTransform::Identity;
  	}

@@ -189,12 +189,13 @@ void ASFDCharacter::OnEnteredIntoRoomLoader()
 	if(GetCharacterMovement() != nullptr)
 	{
 		GetCharacterMovement()->StopMovementImmediately();
-		//GetCharacterMovement()->DisableMovement();
+		GetCharacterMovement()->DisableMovement();
 	}
 }
 
 void ASFDCharacter::OnStepOutFromRoomLoader()
 {
+
 }
 
 float ASFDCharacter::TakeDamage(float Damage, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
@@ -434,4 +435,69 @@ void ASFDCharacter::HandleMovementSpeed()
 	}
 
 	CharMoveComp->MaxWalkSpeed = IsTired() ? 300.0f : 1000.0f;
+}
+
+void ASFDCharacter::StartPreTeleportationTimer(const FTransform& InTeleportationTransform)
+{
+	const UWorld* World = GetWorld();
+	if(!ensureAlways(IsValid(World)))
+	{
+		return;
+	}
+
+	FTimerDelegate Delegate;
+	Delegate.BindUFunction(this, "OnPreTeleportationTimerExpired", InTeleportationTransform);
+	
+	World->GetTimerManager().SetTimer(PrePostTeleportationTimerHandle, Delegate, PreTeleportationDelayTime, false);
+}
+
+void ASFDCharacter::OnPreTeleportationTimerExpired(const FTransform& InTeleportationTransform)
+{
+	TeleportPlayer(InTeleportationTransform);
+}
+
+void ASFDCharacter::StartPostTeleportationTimer()
+{
+	const UWorld* World = GetWorld();
+	if(!ensureAlways(IsValid(World)))
+	{
+		return;
+	}
+
+	World->GetTimerManager().SetTimer(PrePostTeleportationTimerHandle, this, &ASFDCharacter::OnPostTeleportationTimerExpired, PostTeleportationDelayTime);
+}
+
+void ASFDCharacter::OnPostTeleportationTimerExpired()
+{
+	if(GetCharacterMovement() != nullptr)
+	{
+		GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
+	}
+}
+
+void ASFDCharacter::TeleportPlayer(const FTransform& InTeleportationTransform)
+{
+	const bool PrevCameraMovementLag = SpringArmComponent->bEnableCameraLag;
+	const bool PrevCameraRotationLag = SpringArmComponent->bEnableCameraRotationLag;
+	
+	SpringArmComponent->bEnableCameraLag = false;
+	SpringArmComponent->bEnableCameraRotationLag = false;
+
+	SetActorLocation(InTeleportationTransform.GetLocation(), false, nullptr, ETeleportType::ResetPhysics);
+	SetActorRotation(InTeleportationTransform.GetRotation(), ETeleportType::ResetPhysics);
+
+	SpringArmComponent->bEnableCameraLag = PrevCameraMovementLag;
+	SpringArmComponent->bEnableCameraRotationLag = PrevCameraRotationLag;
+	
+	if(OnPlayerTeleported.IsBound())
+	{
+		OnPlayerTeleported.Broadcast();
+	}
+	
+	StartPostTeleportationTimer();
+}
+
+FTransform ASFDCharacter::GetCameraTransform() const
+{
+	return CameraComponent->GetComponentTransform();
 }

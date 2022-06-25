@@ -8,6 +8,8 @@
 class ASFDLevelCore;
 class USFDLevelsManager;
 class ASFDGameMode;
+class ASFDCharacter;
+class ACameraActor;
 
 USTRUCT()
 struct FSFDTimeSnapshot
@@ -86,9 +88,12 @@ namespace SFD
 	FString AttackStateToString(ESFDAttackState InAttackState);
 
 	ASFDLevelCore* GetLevelCore(const ULevel* InLevel);
-	
 	ASFDGameMode* GetGameMode(const UObject* InWorldContext);
+	ASFDCharacter* GetCharacter(const UObject* InWorldContext);
+	APlayerController* GetPlayerController(const UObject* InWorldContext);
 	
 	USFDLevelsManager* GetLevelsManager(const UObject* InWorldContext);
+	ACameraActor* GetCameraActorForTranitionBetweenRooms(const UObject* InWorldContext);
 }
 
+DECLARE_MULTICAST_DELEGATE(FVoidDelegate);

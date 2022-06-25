@@ -29,11 +29,12 @@ public:
 	void PrintIncidenceMatrix_DEBUG();
 #endif
 	
-	void SpawnStartRoom();
-	void SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader);
-
-	void GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex) const;
 	static void GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex, const uint8*const *const InIncidenceMatrix, const uint8 InConnectionsAmount, const uint8 InRoomsAmount);
+	static void InitAdjacency(uint8**& OutAdjacencyMatrixPtrPtr, const uint8 InDimension);
+	// Find the minimum spanning tree and fill an Incidence Matrix
+	static void FindMST(uint8**& OutIncidenceMatrixPtrPtr, const uint8*const *const InAdjacencyMatrixPtrPtr, const uint8 InAdjacencyMatrixDimension);
+	static void ClearMatrix(uint8**& InAdjacencyMatrixPtrPtr, const uint8 InDimensionY);
+	static void PrintMatrix(const uint8 * const * const InMatrix, const uint8 InSizeX, const uint8 InSizeY, const FString& InTitle);
 	
 	FORCEINLINE int8 GetPreviousRoomIndex() const;
 	FORCEINLINE int8 GetCurrentRoomIndex() const;
@@ -43,15 +44,11 @@ public:
 	FORCEINLINE uint8 GetConnectionsAmount() const;
 
 	FORCEINLINE const uint8*const *const GetIncidenceMatrix() const;
-	
-	static void InitAdjacency(uint8**& OutAdjacencyMatrixPtrPtr, const uint8 InDimension);
 
-	// Find the minimum spanning tree and fill an Incidence Matrix
-	static void FindMST(uint8**& OutIncidenceMatrixPtrPtr, const uint8*const *const InAdjacencyMatrixPtrPtr, const uint8 InAdjacencyMatrixDimension);
+	void SpawnStartRoom();
+	void SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader);
 
-	static void ClearMatrix(uint8**& InAdjacencyMatrixPtrPtr, const uint8 InDimensionY);
-
-	static void PrintMatrix(const uint8 * const * const InMatrix, const uint8 InSizeX, const uint8 InSizeY, const FString& InTitle);
+	void GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex) const;
 	
 private:
 		
@@ -63,14 +60,19 @@ private:
 	void ArrangeRooms();
 	
 	UFUNCTION()
-	void OnNextLevelLoaded();
+	void OnNextLevelLoaded(/*const bool bIsFirstRoom*/);
 
-	void TransportPlayerToNextLevel();
+	void TransportPlayerToNextLevel(const bool bSkipPreTeleportationDelay = false);
+	UFUNCTION()
+	void OnPlayerTransportationFinished();
 	
 private:
 	
 	UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess))
 	TSoftObjectPtr<UWorld> RoomInstanceTemplate;
+
+	UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess))
+	float TransitionBetweenRoomsCameraBlendTime = 3.0f;
 	
 	UPROPERTY(Transient)
 	ULevelStreamingDynamic* CurrentRoomDynamicInstance;
@@ -86,12 +88,14 @@ private:
 	
 	//@TODO temp
 	uint8 RoomIndexToStart = 0;
-
+	
 	int8 PreviousRoomIndex = INDEX_NONE;
 	//@TODO temp, should be moved into custom ULevelStreamingDynamic
 	int8 CurrentRoomIndex = INDEX_NONE;
 	//@TODO temp, should be moved into custom ULevelStreamingDynamic
 	int8 PendingRoomIndex = INDEX_NONE;
+	//@TODO temp, should be moved into custom ULevelStreamingDynamic
+	bool bIsStartRoom = false;
 };
 
 FORCEINLINE int8 USFDLevelsManager::GetPreviousRoomIndex() const
