@@ -31,6 +31,30 @@ FString SFD::AttackStateToString(ESFDAttackState InAttackState)
 	return FString("undefined");
 }
 
+ASFDLevelCore* SFD::GetLevelCore(const UObject* InWorldContext, const uint8 InRoomIndex)
+{
+	if(!ensureAlways(IsValid(InWorldContext)))
+	{
+		return nullptr;
+	}
+	
+	const UWorld* World = GEngine->GetWorldFromContextObject(InWorldContext, EGetWorldErrorMode::LogAndReturnNull);
+	if(!ensureAlways(IsValid(World)))
+	{
+		return nullptr;
+	}
+	
+	for(TActorIterator<ASFDLevelCore> CoresItr(World); CoresItr; ++CoresItr)
+	{
+		if(CoresItr->GetRoomIndex() == InRoomIndex)
+		{
+			return *CoresItr;
+		}
+	}
+
+	return nullptr;
+}
+
 ASFDLevelCore* SFD::GetLevelCore(const ULevel* InLevel)
 {
 	if(!ensureAlways(IsValid(InLevel)))
@@ -43,15 +67,18 @@ ASFDLevelCore* SFD::GetLevelCore(const ULevel* InLevel)
 	{
 		return nullptr;
 	}
-
-	bool bIsCoreFound = false;
+	
 	ASFDLevelCore* CoreToReturn = nullptr;
 	
-	for(TActorIterator<ASFDLevelCore> CoresItr(World); CoresItr; ++CoresItr)
+	for(TActorIterator<ASFDLevelCore> It(World); It; ++It)
 	{
 		//ensureAlwaysMsgf(!bIsCoreFound, TEXT("More than one LevelCore are presented in the world somehow. There should be only one LevelCore at time"));
-		CoreToReturn = *CoresItr;
-		bIsCoreFound = true; 
+		ASFDLevelCore* Actor = *It;
+		check(Actor != nullptr);
+		if (IsValid(Actor))
+		{
+			CoreToReturn = Actor;
+		}
 	}
 
 	return CoreToReturn;
@@ -120,22 +147,20 @@ USFDLevelsManager* SFD::GetLevelsManager(const UObject* InWorldContext)
 	return GameMode->GetLevelsManager();
 }
 
-ACameraActor* SFD::GetCameraActorForTranitionBetweenRooms(const UObject* InWorldContext)
+ACameraActor* SFD::GetCameraActorForTransitionBetweenRooms(const UObject* InWorldContext)
 {
 	if(!IsValid(InWorldContext))
 	{
 		return nullptr;
 	}
+	
 	const UWorld* World = GEngine->GetWorldFromContextObject(InWorldContext, EGetWorldErrorMode::LogAndReturnNull);
 	if(!ensureAlways(IsValid(World)))
 	{
 		return nullptr;
 	}
 
-	for(TActorIterator<ACameraActor> CameraActorItr(World); CameraActorItr; ++CameraActorItr)
-	{
-		return *CameraActorItr;
-	}
+	const TActorIterator<ACameraActor> CameraActorItr(World);
 
-	return nullptr;
+	return static_cast<bool>(CameraActorItr) ? *CameraActorItr : nullptr;
 }

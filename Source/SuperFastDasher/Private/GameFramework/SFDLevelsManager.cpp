@@ -7,11 +7,10 @@
 #include "Player/SFDCharacter.h"
 
 #include "Engine/LevelStreamingDynamic.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SFDLevelCore.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetTextLibrary.h"
-#include "Camera/CameraActor.h"
+#include "GameFramework/PlayerStart.h"
 
 USFDLevelsManager::USFDLevelsManager()
 {
@@ -23,12 +22,23 @@ USFDLevelsManager::USFDLevelsManager()
 
 	USFDLevelsManager::PrintMatrix(AdjacencyMatrix, RoomsAmount, RoomsAmount, "Adjacency Matrix");
 	USFDLevelsManager::PrintMatrix(IncidenceMatrix, ConnectionsAmount, RoomsAmount, "Incidence Matrix");
+
+	RoomsTree.Empty();
+	RoomsTree.InsertDefaulted(0, RoomsAmount);
+	
+	USFDLevelsManager::BuildTree(RoomIndexToStart, nullptr, IncidenceMatrix, RoomsAmount, &RoomsTree);
 }
 
 USFDLevelsManager::~USFDLevelsManager()
 {
 	USFDLevelsManager::ClearMatrix(AdjacencyMatrix, RoomsAmount);
 	USFDLevelsManager::ClearMatrix(IncidenceMatrix, RoomsAmount);
+
+	if(RoomsTree.IsValidIndex(RoomIndexToStart)
+		&& RoomsTree[RoomIndexToStart] != nullptr)
+	{
+		delete RoomsTree[RoomIndexToStart];
+	}
 }
 
 void USFDLevelsManager::ClearMatrix(uint8**& InMatrixPtrPtr, const uint8 InDimensionY)
@@ -152,10 +162,32 @@ void USFDLevelsManager::FindMST(uint8**& OutIncidenceMatrixPtrPtr, const uint8* 
 	}
 }
 
-void USFDLevelsManager::ArrangeRooms()
+const FSFDRoomNode* const USFDLevelsManager::BuildTree(const uint8 InRoomIndex
+														, const FSFDRoomNode* ParentRoomNode
+														, const uint8* const* const InIncidenceMatrix
+														, const uint8 InRoomsAmount
+														, TArray<FSFDRoomNode*>* OutRoomsArray /*= nullptr*/)
 {
 	TArray<uint8> Connections;
-	GetAllConnectionsForRoom(Connections, RoomIndexToStart);
+	USFDLevelsManager::GetAllConnectionsForRoom(Connections, InRoomIndex, InIncidenceMatrix, InRoomsAmount - 1, InRoomsAmount);
+	if(ParentRoomNode != nullptr)
+	{
+		Connections.RemoveSingle(ParentRoomNode->RoomIndex);
+	}
+	
+	FSFDRoomNode* Node = new FSFDRoomNode(InRoomIndex, ParentRoomNode, {});
+
+	if(OutRoomsArray != nullptr)
+	{
+		(*OutRoomsArray)[InRoomIndex] = Node;
+	}
+	
+	for(uint8 i = 0; i < Connections.Num(); ++i)
+	{
+		Node->NextRooms.Add(USFDLevelsManager::BuildTree(Connections[i], Node, InIncidenceMatrix, InRoomsAmount, OutRoomsArray));
+	}
+
+	return Node;
 }
 
 #if WITH_EDITOR
@@ -181,6 +213,7 @@ void USFDLevelsManager::PrintIncidenceMatrix_DEBUG()
 	USFDLevelsManager::ClearMatrix(DebugAdjacencyMatrix, RoomsAmount);
 	USFDLevelsManager::ClearMatrix(DebugIncidenceMatrix, RoomsAmount);
 }
+
 #endif
 
 void USFDLevelsManager::PrintMatrix(const uint8* const* const InMatrix, const uint8 InSizeX, const uint8 InSizeY, const FString& InTitle)
@@ -225,61 +258,60 @@ void USFDLevelsManager::PrintMatrix(const uint8* const* const InMatrix, const ui
 	}
 }
 
-void USFDLevelsManager::SpawnStartRoom()
-{
-	if(IsValid(PendingRoomDynamicInstance))
-	{
-		return;
-	}
-	
-	PendingRoomIndex = RoomIndexToStart;
-	CurrentRoomIndex = INDEX_NONE;
-	bIsStartRoom = true;
-	
-	SpawnRoom(RoomInstanceTemplate, FVector::ZeroVector, FRotator::ZeroRotator);
-}
-
-void USFDLevelsManager::SpawnNextRoom(const ASFDNextRoomLoader* InFromRoomLoader)
-{
-	if(IsValid(PendingRoomDynamicInstance))
-	{
-		return;
-	}
-	
-	if(!ensureAlways(IsValid(InFromRoomLoader)))
-	{
-		return;
-	}
-
-	const ULevel* RoomLoaderLevel = InFromRoomLoader->GetLevel();
-	if(!ensureAlways(IsValid(RoomLoaderLevel)))
-	{
-		return;
-	}
-
-	const ASFDLevelCore* CurrentLevelCore = SFD::GetLevelCore(RoomLoaderLevel);
-	if(!ensureAlways(IsValid(RoomLoaderLevel)))
-	{
-		return;
-	}
-	
-	const uint8 RoomToLoadIndex = InFromRoomLoader->GetRoomToLoadIndex();
-	const uint8 LocalIndex = InFromRoomLoader->GetLocalIndex();
-	const FTransform& InNextLevelTransform = CurrentLevelCore->GetNextRoomTransformByLocalIndex(LocalIndex);
-
-	PendingRoomIndex = RoomToLoadIndex;
-	bIsStartRoom = false;
-	
-	SpawnRoom(RoomInstanceTemplate, InNextLevelTransform.GetLocation(), InNextLevelTransform.GetRotation().Rotator());	
-}
-
 void USFDLevelsManager::GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex) const
 {
 	USFDLevelsManager::GetAllConnectionsForRoom(OutConnectedRoomsIndices, InRoomIndex, IncidenceMatrix, ConnectionsAmount, RoomsAmount);
 }
 
+int8 USFDLevelsManager::GetLoaderIndexByRoomToLoadIndex(const uint8 InRoomIndex, const uint8 InRoomToLoadIndex) const
+{
+	return USFDLevelsManager::GetLoaderIndexByRoomToLoadIndex(InRoomIndex, InRoomToLoadIndex, IncidenceMatrix, ConnectionsAmount, RoomsAmount);
+}
+
+const FTransform& USFDLevelsManager::GetRoomCachedTransform(const uint8 InRoomIndex, const ASFDLevelCore* InCurrentRoom) const
+{
+	if(const FTransform* CachedTransform = CachedRoomsTransforms.Find(InRoomIndex))
+	{
+		return *CachedTransform;
+	}
+
+	if(!IsValid(InCurrentRoom))
+	{
+		return CachedRoomsTransforms.Add(InRoomIndex, FTransform::Identity);
+	}
+	
+	const ASFDNextRoomLoader* RoomLoader = InCurrentRoom->GetNextRoomLoaderByRoomIndex(InRoomIndex);
+	if(!IsValid(RoomLoader))
+	{
+		return CachedRoomsTransforms.Add(InRoomIndex, FTransform::Identity);
+	}
+
+	const FVector SpawnerLocation = RoomLoader->GetActorLocation();
+	const FVector RoomCenter = InCurrentRoom->GetRoomCenterLocation();
+	
+	FVector NextRoomLocation = RoomCenter + ((SpawnerLocation - RoomCenter).GetSafeNormal() * InCurrentRoom->GetDistanceBetweenRooms());
+	
+	float RoomZOffset = FMath::RandRange(InCurrentRoom->GetNextRoomsZOffsetMinValue(), InCurrentRoom->GetNextRoomsZOffset());
+	RoomZOffset = FMath::Abs(RoomZOffset) < 1.0f ? 1.0f : RoomZOffset;
+
+	const float Sign = FMath::RandBool() ? 1.0f : -1.0f;
+	
+	NextRoomLocation.Z += RoomZOffset * Sign;
+	
+	return CachedRoomsTransforms.Add(InRoomIndex, FTransform(NextRoomLocation));
+}
+
+int8 USFDLevelsManager::GetLoaderIndexByRoomToLoadIndex(const uint8 InRoomIndex, const uint8 InRoomToLoadIndex,
+                                                        const uint8* const* const InIncidenceMatrix, const uint8 InConnectionsAmount, const uint8 InRoomsAmount)
+{
+	static TArray<uint8> ConnectedRooms;
+	USFDLevelsManager::GetAllConnectionsForRoom(ConnectedRooms, InRoomIndex, InIncidenceMatrix, InConnectionsAmount, InRoomsAmount);
+
+	return ConnectedRooms.IndexOfByPredicate([InRoomToLoadIndex](const uint8 InConnectedRoomIndex){ return InRoomToLoadIndex == InConnectedRoomIndex; });
+}
+
 void USFDLevelsManager::GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoomsIndices, const uint8 InRoomIndex,
-	const uint8* const* const InIncidenceMatrix, const uint8 InConnectionsAmount, const uint8 InRoomsAmount)
+                                                 const uint8* const* const InIncidenceMatrix, const uint8 InConnectionsAmount, const uint8 InRoomsAmount)
 {
 	OutConnectedRoomsIndices.Reset(4);
 	
@@ -313,17 +345,83 @@ void USFDLevelsManager::GetAllConnectionsForRoom(TArray<uint8>& OutConnectedRoom
 	OutConnectedRoomsIndices.Sort();
 }
 
-void USFDLevelsManager::SpawnRoom(const TSoftObjectPtr<UWorld>& InLevelClass, const FVector& InLevelLocation, const FRotator& InLevelRotation)
+void USFDLevelsManager::SpawnStartRoom()
 {
 	if(IsValid(PendingRoomDynamicInstance))
 	{
 		return;
 	}
 
+	RoomTransitionData.Reset();
+	RoomTransitionData.ToRoom = RoomIndexToStart;
+	
+	PendingRoomIndex = RoomIndexToStart;
+	PreviousRoomIndex = INDEX_NONE;
+	CurrentRoomIndex = INDEX_NONE;
+	
+	const FTransform& InNextLevelTransform = GetRoomCachedTransform(RoomIndexToStart, nullptr);
+
+	SpawnRoom(RoomInstanceTemplate, InNextLevelTransform.GetLocation(), InNextLevelTransform.GetRotation().Rotator());
+
+	UE_LOG(LogTemp, Warning, TEXT("Room spawned location: %f, %f, %f")
+		, InNextLevelTransform.GetLocation().X
+		, InNextLevelTransform.GetLocation().Y
+		, InNextLevelTransform.GetLocation().Z);
+}
+
+bool USFDLevelsManager::RequestTransitionToTheNextRoom(const uint8 InRequestedRoomIndex, const uint8 InFromRoomLoader)
+{
+	if(IsValid(PendingRoomDynamicInstance))
+	{
+		return false;
+	}
+
+	RoomTransitionData.Reset();
+	RoomTransitionData.FromRoom = CurrentRoomIndex;
+	RoomTransitionData.FromRoomLoader = InFromRoomLoader;
+	RoomTransitionData.ToRoom = InRequestedRoomIndex;
+
+	if(OnTransitionRequestReceived.IsBound())
+	{
+		OnTransitionRequestReceived.Broadcast(InRequestedRoomIndex);
+	}
+	
+	const ASFDLevelCore* RequestedRoomCore = SFD::GetLevelCore(this, InRequestedRoomIndex);
+	if(IsValid(RequestedRoomCore))
+	{
+		TransportPlayerToLevel(RoomTransitionData.ToRoom);
+		return true;
+	}
+	
+	const ASFDLevelCore* CurrentRoomCore = SFD::GetLevelCore(this, CurrentRoomIndex);
+	if(!ensureAlways(IsValid(CurrentRoomCore)))
+	{
+		return false;
+	}
+
+	PendingRoomIndex = InRequestedRoomIndex;
+	
+	const FTransform& InNextLevelTransform = GetRoomCachedTransform(InRequestedRoomIndex, CurrentRoomCore);
+
+	UE_LOG(LogTemp, Warning, TEXT("Room spawned location: %f, %f, %f")
+		, InNextLevelTransform.GetLocation().X
+		, InNextLevelTransform.GetLocation().Y
+		, InNextLevelTransform.GetLocation().Z);
+	
+	return SpawnRoom(RoomInstanceTemplate, InNextLevelTransform.GetLocation(), InNextLevelTransform.GetRotation().Rotator());
+}
+
+bool USFDLevelsManager::SpawnRoom(const TSoftObjectPtr<UWorld>& InLevelClass, const FVector& InLevelLocation, const FRotator& InLevelRotation)
+{
+	if(IsValid(PendingRoomDynamicInstance))
+	{
+		return false;
+	}
+
 	UWorld* World = GetWorld();
 	if(!ensureAlways(IsValid(World)))
 	{
-		return;
+		return false;
 	}
 	
 	bool bIsSucceed = false;
@@ -331,58 +429,51 @@ void USFDLevelsManager::SpawnRoom(const TSoftObjectPtr<UWorld>& InLevelClass, co
 	if(!ensureAlways(bIsSucceed)
 		|| !ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
-		return;
+		PendingRoomDynamicInstance = nullptr;
+		return false;
+	}
+
+	if(OnRoomSpawnStarted.IsBound())
+	{
+		OnRoomSpawnStarted.Broadcast(PendingRoomIndex);
 	}
 	
-	//PendingLevelDynamicInstance->OnLevelLoaded.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
-	PendingRoomDynamicInstance->OnLevelShown.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
+	PendingRoomDynamicInstance->OnLevelLoaded.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
+	PendingRoomDynamicInstance->OnLevelShown.AddUniqueDynamic(this, &USFDLevelsManager::OnNextLevelShown);
+
+	return true;
 }
 
-void USFDLevelsManager::OnNextLevelLoaded(/*const bool bIsFirstRoom*/)
+void USFDLevelsManager::OnNextLevelLoaded()
 {
 	if(!ensureAlways(IsValid(PendingRoomDynamicInstance)))
 	{
 		return;
 	}
+	
+	PendingRoomDynamicInstance->OnLevelLoaded.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
+}
 
-	//PendingLevelDynamicInstance->OnLevelLoaded.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
-	PendingRoomDynamicInstance->OnLevelShown.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelLoaded);
+void USFDLevelsManager::OnNextLevelShown()
+{
+	if(!ensureAlways(IsValid(PendingRoomDynamicInstance)))
+	{
+		return;
+	}
+	
+	PendingRoomDynamicInstance->OnLevelShown.RemoveDynamic(this, &USFDLevelsManager::OnNextLevelShown);
 
 	PrepareNextRoom();
-
-	if(bIsStartRoom)
+	
+	if(OnRoomSpawned.IsBound())
 	{
-		TransportPlayerToNextLevel(bIsStartRoom);
-		return;
+		OnRoomSpawned.Broadcast(PendingRoomIndex);
 	}
 	
-	ACameraActor* TransitionCamera = SFD::GetCameraActorForTranitionBetweenRooms(this);
-	if(!ensureAlways(IsValid(TransitionCamera)))
+	if(RoomTransitionData.IsValid())
 	{
-		TransportPlayerToNextLevel(bIsStartRoom);
-		return;
+		TransportPlayerToLevel(RoomTransitionData.ToRoom);
 	}
-	
-	APlayerController* PlayerController = SFD::GetPlayerController(this);
-	if(!ensureAlways(IsValid(PlayerController)))
-	{
-		return;
-	}
-
-	//@TODO implement correct view point location and rotation retrieving 
-	{
-		ASFDCharacter* Character = SFD::GetCharacter(this);
-		if(!ensureAlways(IsValid(PlayerController)))
-		{
-			return;
-		}
-
-		TransitionCamera->SetActorTransform(Character->GetCameraTransform());
-	}
-	
-	PlayerController->SetViewTarget(TransitionCamera,FViewTargetTransitionParams());
-
-	TransportPlayerToNextLevel(bIsStartRoom);
 }
 
 void USFDLevelsManager::PrepareNextRoom()
@@ -404,7 +495,7 @@ void USFDLevelsManager::PrepareNextRoom()
 		return;
 	}
 
-	NextLevelCore->SetRoomIndex(PendingRoomIndex);
+	NextLevelCore->InitializeRoom(PendingRoomIndex);
 }
 
 void USFDLevelsManager::ClearPreviousRoom()
@@ -417,40 +508,36 @@ void USFDLevelsManager::ClearPreviousRoom()
 	}
 }
 
-void USFDLevelsManager::TransportPlayerToNextLevel(const bool bSkipPreTeleportationDelay /*= false*/)
+void USFDLevelsManager::TransportPlayerToLevel(const uint8 InLevelIndex)
 {
-	if(!ensureAlways(IsValid(PendingRoomDynamicInstance)))
+	const ASFDLevelCore* NextLevelCore = SFD::GetLevelCore(this, InLevelIndex);
+	if(!ensureAlways(IsValid(NextLevelCore)))
 	{
 		return;
 	}
-	
+		
 	ASFDCharacter* Character = SFD::GetCharacter(this);
 	if(!ensureAlways(IsValid(Character)))
 	{
 		return;
 	}
-	
-	const ULevel* NextRoomLevel = PendingRoomDynamicInstance->GetLoadedLevel();
 
-	const ASFDLevelCore* NextLevelCore = SFD::GetLevelCore(NextRoomLevel);
-	if(!ensureAlways(IsValid(NextLevelCore)))
+	if(!Character->GetOnPlayerTeleportedDelegate().IsBound())
 	{
-		return;
+		Character->GetOnPlayerTeleportedDelegate().AddUObject(this, &USFDLevelsManager::OnPlayerTransportationFinished);
 	}
-	
-	FTransform TransformToSpawnPlayer = FTransform::Identity;
-	
+
 	if(CurrentRoomIndex != INDEX_NONE)
 	{
-		ASFDNextRoomLoader* CurrentRoomLoaderInsidePendingRoom = NextLevelCore->GetNextRoomLoaderByRoomIndex(CurrentRoomIndex);
+		const ASFDNextRoomLoader* CurrentRoomLoaderInsidePendingRoom = NextLevelCore->GetNextRoomLoaderByRoomIndex(CurrentRoomIndex);
 		if(!ensureAlways(IsValid(CurrentRoomLoaderInsidePendingRoom)))
 		{
 			return;
 		}
 		
-		CurrentRoomLoaderInsidePendingRoom->BlockSpawnTillPlayerStepOut();
-		
-		TransformToSpawnPlayer = CurrentRoomLoaderInsidePendingRoom->GetTransformToSpawnPlayer();
+		const FTransform& TransformToSpawnPlayer = CurrentRoomLoaderInsidePendingRoom->GetTransformToSpawnPlayer();
+
+		Character->TeleportPlayer(TransformToSpawnPlayer, false);
 	}
 	else
 	{
@@ -460,21 +547,9 @@ void USFDLevelsManager::TransportPlayerToNextLevel(const bool bSkipPreTeleportat
 			return;
 		}
 		
-		TransformToSpawnPlayer = StartToSpawnPlayer->GetActorTransform();
-	}
+		const FTransform& TransformToSpawnPlayer = StartToSpawnPlayer->GetActorTransform();
 
-	if(!Character->GetOnPlayerTeleportedDelegate().IsBound())
-	{
-		Character->GetOnPlayerTeleportedDelegate().AddUObject(this, &USFDLevelsManager::OnPlayerTransportationFinished);
-	}
-
-	if(bSkipPreTeleportationDelay)
-	{
-		Character->TeleportPlayer(TransformToSpawnPlayer);
-	}
-	else
-	{
-		Character->StartPreTeleportationTimer(TransformToSpawnPlayer);
+		Character->TeleportPlayer(TransformToSpawnPlayer, true);
 	}
 }
 
@@ -486,6 +561,11 @@ void USFDLevelsManager::OnPlayerTransportationFinished()
 		return;
 	}
 
+	if(Character->GetOnPlayerTeleportedDelegate().IsBound())
+	{
+		Character->GetOnPlayerTeleportedDelegate().RemoveAll(this);
+	}
+	
 	APlayerController* PlayerController = SFD::GetPlayerController(this);
 	if(!ensureAlways(IsValid(PlayerController)))
 	{
@@ -499,14 +579,9 @@ void USFDLevelsManager::OnPlayerTransportationFinished()
 			
 		PlayerController->SetViewTarget(Character, param);
 	}
-	
-	if(Character->GetOnPlayerTeleportedDelegate().IsBound())
-	{
-		Character->GetOnPlayerTeleportedDelegate().RemoveAll(this);
-	}
 
 	ClearPreviousRoom();
-
+	
     PreviousRoomIndex = CurrentRoomIndex;
     CurrentRoomIndex = PendingRoomIndex;
     PendingRoomIndex = INDEX_NONE;
@@ -514,5 +589,10 @@ void USFDLevelsManager::OnPlayerTransportationFinished()
     CurrentRoomDynamicInstance = PendingRoomDynamicInstance;
     PendingRoomDynamicInstance = nullptr;
 
-	
+	if(OnTransitionRequestFulfilled.IsBound())
+	{
+		OnTransitionRequestFulfilled.Broadcast(CurrentRoomIndex);
+	}
+
+	RoomTransitionData.Reset();
 }

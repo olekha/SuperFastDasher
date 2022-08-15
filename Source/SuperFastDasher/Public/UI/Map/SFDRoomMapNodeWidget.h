@@ -18,6 +18,8 @@ public:
 	void SetRoomIndex(const uint8 InRoomIndex);
 
 	void SetIsCurrentRoom(const bool bIsCurrentRoom);
+
+	FORCEINLINE uint8 GetRoomIndex() const;
 	
 private:
 	
@@ -29,5 +31,11 @@ private:
 
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget, AllowPrivateAccess))
 	UTextBlock* RoomIndexTextBlock;
-	
+
+	uint8 RoomIndex = 0xFFu;
 };
+
+FORCEINLINE uint8 USFDRoomMapNodeWidget::GetRoomIndex() const
+{
+	return RoomIndex;
+}

@@ -10,7 +10,9 @@
 class UBoxComponent;
 class UTextRenderComponent;
 
-UCLASS()
+DECLARE_EVENT_TwoParams(ASFDNextRoomLoader, FRoomLoaderDelegatem, uint8 /*InRoomIndex*/, uint8/*InLoaderLocalIndex*/);
+
+UCLASS(HideDropdown)
 class SUPERFASTDASHER_API ASFDNextRoomLoader : public AActor
 {
 	GENERATED_BODY()
@@ -21,28 +23,20 @@ public:
 	ASFDNextRoomLoader();
 
 	void SetRoomToLoadIndex(const uint8 InRoomIndex);
-	
-	FORCEINLINE uint8 GetRoomToLoadIndex() const
-	{
-		return RoomToLoadIndex;
-	}
+	FORCEINLINE uint8 GetRoomToLoadIndex() const;
 	
 	void SetLocalIndex(const uint8 InLocalIndex);
+	FORCEINLINE uint8 GetLocalIndex() const;
 	
-	FORCEINLINE uint8 GetLocalIndex() const
-	{
-		return LocalIndex;
-	}
-
-	FORCEINLINE FTransform GetTransformToSpawnPlayer() const
-	{
-		return FTransform(GetActorQuat(), PlayerSpawnPointComponent->GetComponentLocation(), FVector::OneVector); ;
-	}
+	void SetOwnerRoomIndex(const uint8 InNewOwnerRoomIndex);
+	FORCEINLINE uint8 GetOwnerRoomIndex() const;
 	
-	FORCEINLINE void BlockSpawnTillPlayerStepOut()
-	{
-		SpawnDisabledTillEndOverlap = true;
-	}
+	FORCEINLINE FTransform GetTransformToSpawnPlayer() const;
+	
+	//(RoomIndex, LoaderLocalIndex)
+	FORCEINLINE FRoomLoaderDelegatem& GetOnPlayerStepIntoLoaderDelegate();
+	//(RoomIndex, LoaderLocalIndex)
+	FORCEINLINE FRoomLoaderDelegatem& GetOnPlayerStepOutOfLoaderDelegate();
 	
 protected:
 	
@@ -71,10 +65,43 @@ protected:
 	USceneComponent* PlayerSpawnPointComponent;
 	
 private:
+
+	//(RoomIndex, LoaderLocalIndex)
+	FRoomLoaderDelegatem OnPlayerStepIntoLoader;
+	//(RoomIndex, LoaderLocalIndex)
+	FRoomLoaderDelegatem OnPlayerStepOutOfLoader;
 	
 	uint8 RoomToLoadIndex = 0xFFu;
-
+	uint8 OwnerRoomIndex = 0xFFu;
 	uint8 LocalIndex = 0xFFu;
-
-	bool SpawnDisabledTillEndOverlap = false;
 };
+
+FORCEINLINE uint8 ASFDNextRoomLoader::GetRoomToLoadIndex() const
+{
+	return RoomToLoadIndex;
+}
+
+FORCEINLINE uint8 ASFDNextRoomLoader::GetLocalIndex() const
+{
+	return LocalIndex;
+}
+
+FORCEINLINE uint8 ASFDNextRoomLoader::GetOwnerRoomIndex() const
+{
+	return OwnerRoomIndex;
+}
+
+FORCEINLINE FTransform ASFDNextRoomLoader::GetTransformToSpawnPlayer() const
+{
+	return FTransform(GetActorQuat(), PlayerSpawnPointComponent->GetComponentLocation(), FVector::OneVector);;
+}
+
+FORCEINLINE FRoomLoaderDelegatem& ASFDNextRoomLoader::GetOnPlayerStepIntoLoaderDelegate()
+{
+	return OnPlayerStepIntoLoader;
+}
+
+FORCEINLINE FRoomLoaderDelegatem& ASFDNextRoomLoader::GetOnPlayerStepOutOfLoaderDelegate()
+{
+	return OnPlayerStepOutOfLoader;
+}

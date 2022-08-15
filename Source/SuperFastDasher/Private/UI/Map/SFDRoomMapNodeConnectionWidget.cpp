@@ -21,7 +21,7 @@ void USFDRoomMapNodeConnectionWidget::AdjustConnectionBetweenPointsAsCanvasPanel
 	}
 	
 	AsCanvasPanelSlot->SetAutoSize(true);
-	AsCanvasPanelSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
+	AsCanvasPanelSlot->SetAnchors(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 	AsCanvasPanelSlot->SetAlignment(FVector2D(0.5f, 1.0f));
 	
 	AsCanvasPanelSlot->SetPosition(InPointA);

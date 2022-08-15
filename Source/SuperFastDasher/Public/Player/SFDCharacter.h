@@ -15,7 +15,7 @@ class USFDVitalityComponent;
 class USFDCombatManagerComponent;
 struct FSFDMove;
 
-DECLARE_EVENT(ASFDCharacter, FPlayerTeleportedDelegate);
+DECLARE_EVENT(ASFDCharacter, FPlayerTeleportDelegate);
 
 UCLASS()
 class SUPERFASTDASHER_API ASFDCharacter : public ACharacter
@@ -25,9 +25,6 @@ class SUPERFASTDASHER_API ASFDCharacter : public ACharacter
 public:
 
 	ASFDCharacter(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
-
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
 
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
@@ -48,22 +45,24 @@ public:
 
 	virtual float PlayAnimMontage(class UAnimMontage* AnimMontage, float InPlayRate = 1.f, FName StartSectionName = NAME_None) override;
 	float PlayAnimMontage(class UAnimMontage* AnimMontage, bool OnWholeBody, float InPlayRate = 1.f, FName StartSectionName = NAME_None);
-
-	void OnEnteredIntoRoomLoader();
-	void OnStepOutFromRoomLoader();
+	
+	void OnPreTeleportToTheNextRoom();
 	
 	void StartPreTeleportationTimer(const FTransform& InTeleportationTransform);
-	void TeleportPlayer(const FTransform& InTeleportationTransform);
+	void TeleportPlayer(const FTransform& InTeleportationTransform, const bool bInstantTeleport = true);
 	
-	FORCEINLINE FPlayerTeleportedDelegate& GetOnPlayerTeleportedDelegate();	
+	FORCEINLINE FPlayerTeleportDelegate& GetOnPlayerTeleportedDelegate();
+	FORCEINLINE FPlayerTeleportDelegate& GetOnPlayerStartedTeleportationDelegate();
+	
 	FTransform GetCameraTransform() const;
+	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-	FVector CalculateForwardMovementVector() const;
-	FRotator CalculateRotationFromDirection() const;
-
+	// Called every frame
+	virtual void Tick(float DeltaTime) override;
+	
 	virtual float TakeDamage(float Damage, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 private:
@@ -78,6 +77,9 @@ private:
 
 	void StartBlock_Input();
 	void EndBlock_Input();
+	
+	FVector CalculateForwardMovementVector() const;
+	FRotator CalculateRotationFromDirection() const;
 
 	void HandleMeshRotationTowardsDirection(const float DeltaSeconds);
 	void HandleMovementSpeed();
@@ -91,6 +93,7 @@ private:
 	void OnPostTeleportationTimerExpired();
 
 private:
+	
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	float PostTeleportationDelayTime = 2.0f;
 	
@@ -142,7 +145,8 @@ private:
 	UPROPERTY(Transient)
 	FTimerHandle PrePostTeleportationTimerHandle;
 	
-	FPlayerTeleportedDelegate OnPlayerTeleported;	
+	FPlayerTeleportDelegate OnPlayerTeleported;
+	FPlayerTeleportDelegate OnPlayerStartedTeleportation;
 };
 
 FORCEINLINE bool ASFDCharacter::IsBlockInitiated() const
@@ -160,7 +164,12 @@ FORCEINLINE USFDVitalityComponent* ASFDCharacter::GetVitalityComponent() const
 	return SFDVitalityComponent;
 }
 
-FORCEINLINE FPlayerTeleportedDelegate& ASFDCharacter::GetOnPlayerTeleportedDelegate()
+FORCEINLINE FPlayerTeleportDelegate& ASFDCharacter::GetOnPlayerTeleportedDelegate()
 {
 	return OnPlayerTeleported;
+}
+
+FORCEINLINE FPlayerTeleportDelegate& ASFDCharacter::GetOnPlayerStartedTeleportationDelegate()
+{
+	return OnPlayerStartedTeleportation;
 }

@@ -18,12 +18,19 @@ class SUPERFASTDASHER_API USFDMapWidget : public UUserWidget
 protected:
 
 	virtual void NativeConstruct() override;
-
-	virtual void NativePreConstruct() override;
+	virtual void NativeDestruct() override;
 	
+	virtual void NativePreConstruct() override;
+
 private:
 
 	void BuildMap(const uint8 InRoomsAmount, const uint8* const * const InIncidenceMatrix, int8 InCurrentRoom = INDEX_NONE);
+
+	void CreateRoomWidget(const uint8 InRoomIndex,
+		const uint8 InWentFromRoomIndex,
+		const uint8 InRoomsAmount,
+		const uint8* const * const InIncidenceMatrix,
+		FVector2D& InNodeLocation);
 	
 private:
 	
@@ -37,10 +44,7 @@ private:
 	int32 RoomsArrangementCircleRadius = 200.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess))
-	FVector2D EvenRoomsNodesOffset = FVector2D(0.0f, 0.0f);
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess))
-	FVector2D OddRoomsNodesOffset = FVector2D(0.0f, 0.0f);
+	FVector2D RoomsNodesOffset = FVector2D(100.0f, 20.0f);
 
 #if WITH_EDITORONLY_DATA
 	
@@ -51,5 +55,7 @@ private:
 	
 	UPROPERTY(BlueprintReadOnly, meta = (BindWidget, AllowPrivateAccess))
 	UCanvasPanel* MapCanvasPanel;
-	
+
+	UPROPERTY(Transient)
+	TArray<USFDRoomMapNodeWidget*> RoomsNodesWidgets;
 };

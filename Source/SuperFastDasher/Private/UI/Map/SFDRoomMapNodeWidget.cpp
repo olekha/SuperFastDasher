@@ -8,6 +8,8 @@
 
 void USFDRoomMapNodeWidget::SetRoomIndex(const uint8 InRoomIndex)
 {
+	RoomIndex = InRoomIndex;
+	
 	RoomIndexTextBlock->SetText(FText::AsNumber(InRoomIndex));
 }
 

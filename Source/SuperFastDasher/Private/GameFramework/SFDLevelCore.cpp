@@ -7,6 +7,8 @@
 #include "Engine/TextRenderActor.h"
 #include "GameFramework/SFDNextRoomLoader.h"
 #include "GameFramework/SFDLevelsManager.h"
+#include "GameFramework/SFDLoadersSpawner.h"
+#include "SuperFastDasher/SuperFastDasher.h"
 
 // Sets default values
 ASFDLevelCore::ASFDLevelCore()
@@ -20,27 +22,82 @@ ASFDLevelCore::ASFDLevelCore()
 void ASFDLevelCore::BeginPlay()
 {
 	Super::BeginPlay();
-
-	ensureAlways(NextRoomLoaders.Num() == 4);
-	ensureAlways(RoomsSpawnPoints.Num() == 4);
-
-	for(uint8 i = 0; i < NextRoomLoaders.Num(); ++i)
+	
+	ensureAlways(IsValid(RoomLoadersSpawner));
+	
+	USFDLevelsManager* LevelsManager = SFD::GetLevelsManager(this);
+	if(ensureAlways(IsValid(LevelsManager)))
 	{
-		ASFDNextRoomLoader* RoomLoader = NextRoomLoaders[i];
-		if(!ensureAlways(IsValid(RoomLoader)))
+		if(!LevelsManager->GetOnTransitionRequestReceivedDelegate().IsBoundToObject(this))
 		{
-			continue;
+			LevelsManager->GetOnTransitionRequestReceivedDelegate().AddUObject(this, &ASFDLevelCore::OnTransitionRequestReceived);
 		}
-
-		RoomLoader->SetLocalIndex(i);
-		RoomLoader->SetActorHiddenInGame(true);
-		RoomLoader->SetActorEnableCollision(false);
+		
+		if(!LevelsManager->GetOnTransitionRequestFulfilledDelegate().IsBoundToObject(this))
+		{
+			LevelsManager->GetOnTransitionRequestFulfilledDelegate().AddUObject(this, &ASFDLevelCore::OnTransitionRequestFulfilled);
+		}
 	}
+}
+
+void ASFDLevelCore::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+
+	for(uint8 i = 0; i < SpawnedLoaders.Num(); ++i)
+    {
+        ASFDNextRoomLoader* RoomLoader = SpawnedLoaders[i];
+        if(!IsValid(RoomLoader))
+        {
+        	continue;
+        }
+
+        RoomLoader->SetLocalIndex(0xFFu);
+
+        if(RoomLoader->GetOnPlayerStepIntoLoaderDelegate().IsBoundToObject(this))
+        {
+        	RoomLoader->GetOnPlayerStepIntoLoaderDelegate().RemoveAll(this);
+        }
+
+        if(RoomLoader->GetOnPlayerStepOutOfLoaderDelegate().IsBoundToObject(this))
+        {
+        	RoomLoader->GetOnPlayerStepOutOfLoaderDelegate().RemoveAll(this);
+        }
+    }
+
+	ClearLoadersActors();
+
+	USFDLevelsManager* LevelsManager = SFD::GetLevelsManager(this);
+	if(ensureAlways(IsValid(LevelsManager)))
+	{
+		if(LevelsManager->GetOnTransitionRequestReceivedDelegate().IsBoundToObject(this))
+		{
+			LevelsManager->GetOnTransitionRequestReceivedDelegate().RemoveAll(this);
+		}
+		
+		if(LevelsManager->GetOnTransitionRequestFulfilledDelegate().IsBoundToObject(this))
+		{
+			LevelsManager->GetOnTransitionRequestFulfilledDelegate().RemoveAll(this);
+		}
+	}
+}
+
+void ASFDLevelCore::ClearLoadersActors()
+{
+	for(uint8 i = 0; i < SpawnedLoaders.Num(); ++i)
+	{
+		if(IsValid(SpawnedLoaders[i]))
+		{
+			SpawnedLoaders[i]->Destroy();
+		}
+	}
+
+	SpawnedLoaders.Empty();
 }
 
 ASFDNextRoomLoader* ASFDLevelCore::GetNextRoomLoaderByRoomIndex(const uint8 InRoomIndex) const
 {
-	ASFDNextRoomLoader* const * NextRoomLoader = NextRoomLoaders.FindByPredicate([InRoomIndex](const ASFDNextRoomLoader* RoomLoader){ return RoomLoader->GetRoomToLoadIndex() == InRoomIndex;});
+	ASFDNextRoomLoader* const * NextRoomLoader = SpawnedLoaders.FindByPredicate([InRoomIndex](const ASFDNextRoomLoader* RoomLoader){ return RoomLoader->GetRoomToLoadIndex() == InRoomIndex;});
 
 	if(NextRoomLoader == nullptr
 		|| !IsValid(*NextRoomLoader))
@@ -53,48 +110,15 @@ ASFDNextRoomLoader* ASFDLevelCore::GetNextRoomLoaderByRoomIndex(const uint8 InRo
 
 ASFDNextRoomLoader* ASFDLevelCore::GetNextRoomLoaderByLocalIndex(const uint8 InLocalIndexIndex) const
 {
-	if(NextRoomLoaders.IsValidIndex(InLocalIndexIndex))
+	if(SpawnedLoaders.IsValidIndex(InLocalIndexIndex))
 	{
 		return nullptr;
 	}
 
-	return NextRoomLoaders[InLocalIndexIndex];
+	return SpawnedLoaders[InLocalIndexIndex];
 }
 
-const FTransform& ASFDLevelCore::GetNextRoomTransformByRoomIndex(const uint8 InRoomIndex) const
-{
-	const int32 RoomLoaderIndex = NextRoomLoaders.IndexOfByPredicate([InRoomIndex](const ASFDNextRoomLoader* RoomLoader){ return RoomLoader->GetRoomToLoadIndex() == InRoomIndex;});
-
-	if(RoomLoaderIndex == INDEX_NONE)
-	{
-		return FTransform::Identity;
-	}
-
-	if(!ensureAlways(RoomsSpawnPoints.IsValidIndex(RoomLoaderIndex)))
-	{
-		return FTransform::Identity;
-	}
-
-	return RoomsSpawnPoints[RoomLoaderIndex]->GetActorTransform();
-}
-
-const FTransform& ASFDLevelCore::GetNextRoomTransformByLocalIndex(const uint8 InLocalIndexIndex) const
-{
-	if(!RoomsSpawnPoints.IsValidIndex(InLocalIndexIndex))
- 	{
- 		return FTransform::Identity;
- 	}
-
-	const AActor* RoomSpawnPoint = RoomsSpawnPoints[InLocalIndexIndex];
-	if(!ensureAlways(IsValid(RoomSpawnPoint)))
-	{
-		return FTransform::Identity;
-	}
-
-	return RoomSpawnPoint->GetActorTransform();
-}
-
-void ASFDLevelCore::SetRoomIndex(const uint8 InRoomIndex)
+void ASFDLevelCore::InitializeRoom(const uint8 InRoomIndex)
 {
 	if(!ensureAlways(InRoomIndex != INDEX_NONE))
 	{
@@ -102,7 +126,7 @@ void ASFDLevelCore::SetRoomIndex(const uint8 InRoomIndex)
 	}
 	
 	RoomIndex = InRoomIndex;
-
+	
 	if(IsValid(RoomIndexTextRenderActor))
 	{
 		RoomIndexTextRenderActor->GetTextRender()->SetText(FText::AsNumber(RoomIndex));
@@ -113,7 +137,8 @@ void ASFDLevelCore::SetRoomIndex(const uint8 InRoomIndex)
 
 void ASFDLevelCore::UpdateNextRoomsLoaders()
 {
-	if(!ensureAlways(RoomIndex != INDEX_NONE))
+	if(!ensureAlways(RoomIndex != INDEX_NONE)
+		|| !ensureAlways(IsValid(RoomLoadersSpawner)))
 	{
 		return;
 	}
@@ -124,47 +149,108 @@ void ASFDLevelCore::UpdateNextRoomsLoaders()
 		return;
 	}
 	
-	static TArray<uint8> ConnectedRooms;
-	LevelsManager->GetAllConnectionsForRoom(ConnectedRooms, RoomIndex);
+	static TArray<uint8> ConnectedRoomsIndices;
+	LevelsManager->GetAllConnectionsForRoom(ConnectedRoomsIndices, RoomIndex);
 
-	ensureAlways(ConnectedRooms.Num() <= 4);
-	
-	for(uint8 i = 0; i < ConnectedRooms.Num(); ++i)
+	if (!ensureAlways(ConnectedRoomsIndices.Num() != 0))
 	{
-		const uint8 ConnectedRoomIndex = ConnectedRooms[i];
-		const uint8 LocalIndex = GetFreeLocalIndexForNextRoom(ConnectedRoomIndex);
-		
-		if(!ensureAlways(NextRoomLoaders.IsValidIndex(LocalIndex)))
+		return;
+	}
+
+	auto InitializeLoader = [this](ASFDNextRoomLoader*& InLoader, const int32 InLocalIndex, const int32 InLoadRoomIndex, const int32 InOwnerIndex) 
+	{
+		InLoader->SetLocalIndex(InLocalIndex);
+		InLoader->SetRoomToLoadIndex(InLoadRoomIndex);
+		InLoader->SetOwnerRoomIndex(InOwnerIndex);
+
+		if (!InLoader->GetOnPlayerStepIntoLoaderDelegate().IsBoundToObject(this))
 		{
-			continue;
+			InLoader->GetOnPlayerStepIntoLoaderDelegate().AddUObject(this, &ASFDLevelCore::OnPlayerEntersRoomLoader);
+		}
+
+		if (!InLoader->GetOnPlayerStepOutOfLoaderDelegate().IsBoundToObject(this))
+		{
+			InLoader->GetOnPlayerStepOutOfLoaderDelegate().AddUObject(this, &ASFDLevelCore::OnPlayerLeavesRoomLoader);
+		}
+	};
+
+	const uint8 PreviousRoomIndex = LevelsManager->GetPreviousRoomIndex(RoomIndex);
+	
+	if(IsValid(PreviousRoomLoaderActor))
+	{
+		if (PreviousRoomIndex != 0xFFu)
+		{
+			const bool bRemovedAny = static_cast<bool>(ConnectedRoomsIndices.RemoveSingle(PreviousRoomIndex));
+
+			ensureAlways(bRemovedAny);
+		
+			InitializeLoader(PreviousRoomLoaderActor, 0, PreviousRoomIndex, RoomIndex);
+		}
+		else
+		{
+			PreviousRoomLoaderActor->SetActorEnableCollision(false);
+			PreviousRoomLoaderActor->SetActorHiddenInGame(true);
+		}
+	}
+	
+	RoomLoadersSpawner->SpawnLoaders(ConnectedRoomsIndices.Num(), SpawnedLoaders);
+
+	ensureAlways(!SpawnedLoaders.IsEmpty() || IsValid(PreviousRoomLoaderActor));
+
+	for(uint8 i = 0; i < SpawnedLoaders.Num(); ++i)
+	{
+		ASFDNextRoomLoader* RoomLoader = SpawnedLoaders[i];
+		if(ensureAlways(IsValid(RoomLoader)))
+		{
+			InitializeLoader(RoomLoader, i + 1, ConnectedRoomsIndices[i], RoomIndex);
+		}	
+	}
+
+	if (IsValid(PreviousRoomLoaderActor) && PreviousRoomIndex != INDEX_NONE)
+	{
+		SpawnedLoaders.Insert(PreviousRoomLoaderActor, 0);
+	}
+}
+
+void ASFDLevelCore::OnPlayerEntersRoomLoader(uint8 InRoomIndex, uint8 InLoaderLocalIndex)
+{
+	
+}
+
+void ASFDLevelCore::OnPlayerLeavesRoomLoader(uint8 InRoomIndex, uint8 InLoaderLocalIndex)
+{
+	if(!bIsTeleportsEnabled)
+	{
+		USFDLevelsManager* LevelsManager = SFD::GetLevelsManager(this);
+		if(!ensureAlways(IsValid(LevelsManager)))
+		{
+			return;
 		}
 		
-		ASFDNextRoomLoader* RoomLoader = NextRoomLoaders[LocalIndex];
-		if(RoomLoader->GetRoomToLoadIndex() == 0xFFu)
+		if(RoomIndex == InRoomIndex)
 		{
-			RoomLoader->SetRoomToLoadIndex(ConnectedRoomIndex);
-			RoomLoader->SetActorEnableCollision(true);
-			RoomLoader->SetActorHiddenInGame(false);
+			EnableTeleports();
 		}
 	}
 }
 
-uint8 ASFDLevelCore::GetFreeLocalIndexForNextRoom(const uint8 InRoomIndex) const
+void ASFDLevelCore::OnTransitionRequestReceived(const uint8 InTransitionRoomIndex)
 {
-	uint8 LocalIndex = (InRoomIndex / static_cast<uint8>(3));
+	DisableTeleports();
+}
 
-	if(NextRoomLoaders[LocalIndex]->GetRoomToLoadIndex() != 0xFFu)
+void ASFDLevelCore::OnTransitionRequestFulfilled(const uint8 InTransitionRoomIndex)
+{
+	USFDLevelsManager* LevelsManager = SFD::GetLevelsManager(this);
+	if(!ensureAlways(IsValid(LevelsManager)))
 	{
-		LocalIndex = 0xFFu;
-		for(uint8 i = 0; i < NextRoomLoaders.Num(); ++i)
-		{
-			if(NextRoomLoaders[i]->GetRoomToLoadIndex() == 0xFFu)
-			{
-				LocalIndex = i;
-				break;
-			}
-		}
+		return;
 	}
 
-	return LocalIndex;
+	const FSFDRoomTransitionData& TransitionData = LevelsManager->GetRoomTransitionData();
+
+	if(TransitionData.FromRoom == 0xFFu)
+	{
+		EnableTeleports();
+	}
 }

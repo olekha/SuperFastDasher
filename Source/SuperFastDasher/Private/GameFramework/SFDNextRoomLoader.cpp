@@ -2,9 +2,9 @@
 
 
 #include "GameFramework/SFDNextRoomLoader.h"
-#include "GameFramework/SFDGameMode.h"
 #include "Player/SFDCharacter.h"
 #include "GameFramework/SFDLevelsManager.h"
+#include "GameFramework/SFDLevelCore.h"
 
 #include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -37,6 +37,11 @@ void ASFDNextRoomLoader::SetLocalIndex(const uint8 InLocalIndex)
 	LocalIndex = InLocalIndex;
 }
 
+void ASFDNextRoomLoader::SetOwnerRoomIndex(const uint8 InNewOwnerRoomIndex)
+{
+	OwnerRoomIndex = InNewOwnerRoomIndex;
+}
+
 // Called when the game starts or when spawned
 void ASFDNextRoomLoader::BeginPlay()
 {
@@ -51,29 +56,43 @@ void ASFDNextRoomLoader::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 
 	BoxTrigerComponent->OnComponentBeginOverlap.RemoveAll(this);
+	BoxTrigerComponent->OnComponentEndOverlap.RemoveAll(this);
 }
 
 void ASFDNextRoomLoader::OnBoxComponentBeginOverlapped(UPrimitiveComponent* OverlappedComp, AActor* Other, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	if(!IsValid(Other)
-		|| !Other->IsA<ASFDCharacter>()
-		|| SpawnDisabledTillEndOverlap)
+		|| !Other->IsA<ASFDCharacter>())
+	{
+		return;
+	}
+	
+	if(OnPlayerStepIntoLoader.IsBound())
+	{
+		OnPlayerStepIntoLoader.Broadcast(OwnerRoomIndex, LocalIndex);
+	}
+	
+	const ASFDLevelCore* LevelCore = SFD::GetLevelCore(this, OwnerRoomIndex);
+	if(!ensureAlways(IsValid(LevelCore)))
 	{
 		return;
 	}
 
-	ASFDCharacter* Character = CastChecked<ASFDCharacter>(Other);
-	Character->OnEnteredIntoRoomLoader();
+	if(!LevelCore->IsTeleportsEnabled())
+	{
+		return;
+	}
 	
-	UE_LOG(LogTemp, Error, TEXT("Try to load level %i"), RoomToLoadIndex);
-
 	USFDLevelsManager* LevelsManager =  SFD::GetLevelsManager(this);
 	if(!ensureAlways(IsValid(LevelsManager)))
 	{
 		return;
 	}
-		
-	LevelsManager->SpawnNextRoom(this);
+	
+	ASFDCharacter* Character = CastChecked<ASFDCharacter>(Other);	
+	Character->OnPreTeleportToTheNextRoom();
+
+	LevelsManager->RequestTransitionToTheNextRoom(RoomToLoadIndex, LocalIndex);
 }
 
 void ASFDNextRoomLoader::OnBoxComponentEndOverlapped(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
@@ -84,8 +103,8 @@ void ASFDNextRoomLoader::OnBoxComponentEndOverlapped(UPrimitiveComponent* Overla
 		return;
 	}
 
-	ASFDCharacter* Character = CastChecked<ASFDCharacter>(OtherActor);
-	Character->OnStepOutFromRoomLoader();
-	
-	SpawnDisabledTillEndOverlap = false;
+	if(OnPlayerStepOutOfLoader.IsBound())
+	{
+		OnPlayerStepOutOfLoader.Broadcast(OwnerRoomIndex, LocalIndex);
+	}
 }

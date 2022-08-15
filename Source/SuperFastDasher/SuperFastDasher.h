@@ -87,13 +87,15 @@ namespace SFD
 {
 	FString AttackStateToString(ESFDAttackState InAttackState);
 
+	ASFDLevelCore* GetLevelCore(const UObject* InWorldContext, const uint8 InRoomIndex);
 	ASFDLevelCore* GetLevelCore(const ULevel* InLevel);
+	
 	ASFDGameMode* GetGameMode(const UObject* InWorldContext);
 	ASFDCharacter* GetCharacter(const UObject* InWorldContext);
 	APlayerController* GetPlayerController(const UObject* InWorldContext);
 	
 	USFDLevelsManager* GetLevelsManager(const UObject* InWorldContext);
-	ACameraActor* GetCameraActorForTranitionBetweenRooms(const UObject* InWorldContext);
+	ACameraActor* GetCameraActorForTransitionBetweenRooms(const UObject* InWorldContext);
 }
 
 DECLARE_MULTICAST_DELEGATE(FVoidDelegate);

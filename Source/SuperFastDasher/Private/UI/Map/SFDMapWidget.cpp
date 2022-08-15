@@ -3,6 +3,7 @@
 
 #include "UI/Map/SFDMapWidget.h"
 
+#include "Blueprint/WidgetTree.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "GameFramework/SFDLevelsManager.h"
@@ -21,21 +22,26 @@ void USFDMapWidget::NativeConstruct()
 	}
 }
 
+void USFDMapWidget::NativeDestruct()
+{
+	Super::NativeDestruct();
+}
+
 void USFDMapWidget::NativePreConstruct()
 {
 	Super::NativePreConstruct();
 
-#if WITH_EDITORONLY_DATA
+#if WITH_EDITORONLY_DATA && WITH_EDITOR
 	if(IsDesignTime())
 	{
 		uint8** DebugAdjacencyMatrix = nullptr;
 		USFDLevelsManager::InitAdjacency(DebugAdjacencyMatrix, RoomsAmount_DEBUG);
-
+		
 		uint8** DebugIncidenceMatrix = nullptr;
 		USFDLevelsManager::FindMST(DebugIncidenceMatrix, DebugAdjacencyMatrix, RoomsAmount_DEBUG);
-				
+	
 		BuildMap(RoomsAmount_DEBUG, DebugIncidenceMatrix, 0);
-
+		
 		USFDLevelsManager::ClearMatrix(DebugAdjacencyMatrix, RoomsAmount_DEBUG);
 		USFDLevelsManager::ClearMatrix(DebugIncidenceMatrix, RoomsAmount_DEBUG);
 	}
@@ -50,49 +56,27 @@ void USFDMapWidget::BuildMap(const uint8 InRoomsAmount, const uint8* const * con
 	{
 		return;
 	}
-
+	
 	MapCanvasPanel->ClearChildren();
-	
-	const float RoomsOffsetAngle = 360.0f / static_cast<float>(InRoomsAmount);
+	RoomsNodesWidgets.Reset();
 
-	float OffsetsAnglesSum = 0.0f;
+	FVector2D GraphStartPoint = FVector2D(0.0f, 0.0f);
+	CreateRoomWidget(0,0xFFu,InRoomsAmount, InIncidenceMatrix, GraphStartPoint);
+		
+	Algo::Sort(RoomsNodesWidgets, [](const USFDRoomMapNodeWidget* const A, const USFDRoomMapNodeWidget* const B){ return A->GetRoomIndex() < B->GetRoomIndex(); });
 	
-	for(uint8 i = 0; i < InRoomsAmount; ++i)
+	if(RoomsNodesWidgets.IsValidIndex(InCurrentRoom))
 	{
-		USFDRoomMapNodeWidget* RoomNodeWidget = CreateWidget<USFDRoomMapNodeWidget>(this, RoomWidgetTemplate);
-		RoomNodeWidget->SetRoomIndex(i);
-		
-		FVector2D Position = FVector2D(static_cast<float>(RoomsArrangementCircleRadius) * FMath::Sin(FMath::DegreesToRadians(-OffsetsAnglesSum)),
-			static_cast<float>(RoomsArrangementCircleRadius) * FMath::Cos(FMath::DegreesToRadians(-OffsetsAnglesSum)));
-
-		const FVector2D Direction = Position / Position.Length();
-
-		Position += Direction * (i % 2 ? OddRoomsNodesOffset : EvenRoomsNodesOffset);
-		
-		UCanvasPanelSlot* CanvasPanelSlot = MapCanvasPanel->AddChildToCanvas(RoomNodeWidget);
-		CanvasPanelSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
-		CanvasPanelSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-		CanvasPanelSlot->SetAutoSize(true);
-		CanvasPanelSlot->SetPosition(Position);
-		CanvasPanelSlot->SetZOrder(10);
-		
-		OffsetsAnglesSum += RoomsOffsetAngle;
+		RoomsNodesWidgets[InCurrentRoom]->SetIsCurrentRoom(true);
 	}
 
-	if(InCurrentRoom != INDEX_NONE)
+	for(int i = 0; i < RoomsNodesWidgets.Num(); ++i)
 	{
-		USFDRoomMapNodeWidget* InCurrentRoomNodeWidget = Cast<USFDRoomMapNodeWidget>(MapCanvasPanel->GetChildAt(InCurrentRoom));
-
-		InCurrentRoomNodeWidget->SetIsCurrentRoom(true);
-	}
-	
-	const TArray<UPanelSlot*>& RoomsSlots = MapCanvasPanel->GetSlots();
-	
-	for(uint8 i = 0; i < InRoomsAmount; ++i)
-	{
-		static TArray<uint8> Connections;
+		const FVector2D RoomAPosition = Cast<UCanvasPanelSlot>(RoomsNodesWidgets[i]->Slot)->GetPosition(); 
+		
+		TArray<uint8> Connections;
 		USFDLevelsManager::GetAllConnectionsForRoom(Connections, i, InIncidenceMatrix, InRoomsAmount - 1, InRoomsAmount);
-
+		
 		for(uint8 j = 0; j < Connections.Num(); ++j)
 		{
 			const uint8 ConnectedRoom = Connections[j];
@@ -101,21 +85,58 @@ void USFDMapWidget::BuildMap(const uint8 InRoomsAmount, const uint8* const * con
 				continue;
 			}
 			
-			if(!ensureAlways(RoomsSlots.IsValidIndex(i))
-				|| !ensureAlways(RoomsSlots.IsValidIndex(j))
-				|| !IsValid(RoomsSlots[i])
-				|| !IsValid(RoomsSlots[j]))
-			{
-				continue;
-			}
-
-			const UCanvasPanelSlot* AsCanvasPanelSlotA = CastChecked<UCanvasPanelSlot>(RoomsSlots[i]);
-			const UCanvasPanelSlot* AsCanvasPanelSlotB = CastChecked<UCanvasPanelSlot>(RoomsSlots[ConnectedRoom]);
+			const FVector2D RoomBPosition = Cast<UCanvasPanelSlot>(RoomsNodesWidgets[ConnectedRoom]->Slot)->GetPosition();
 			
 			USFDRoomMapNodeConnectionWidget* ConnectionWidget = CreateWidget<USFDRoomMapNodeConnectionWidget>(this, RoomConnectionWidgetTemplate);
 			MapCanvasPanel->AddChild(ConnectionWidget);
-			
-			ConnectionWidget->AdjustConnectionBetweenPointsAsCanvasPanelSlot(AsCanvasPanelSlotA->GetPosition(), AsCanvasPanelSlotB->GetPosition());
+
+			ConnectionWidget->AdjustConnectionBetweenPointsAsCanvasPanelSlot(RoomAPosition + 35.0f, RoomBPosition + 35.0f);
 		}
 	}
+}
+
+void USFDMapWidget::CreateRoomWidget(const uint8 InRoomIndex,
+	const uint8 InWentFromRoomIndex,
+	const uint8 InRoomsAmount,
+	const uint8* const * const InIncidenceMatrix,
+	FVector2D& InNodeLocation)
+{
+	TArray<uint8> Connections;
+	USFDLevelsManager::GetAllConnectionsForRoom(Connections, InRoomIndex, InIncidenceMatrix, InRoomsAmount - 1, InRoomsAmount);
+
+	Connections.RemoveSingle(InWentFromRoomIndex);
+	
+	USFDRoomMapNodeWidget* RoomNodeWidget = CreateWidget<USFDRoomMapNodeWidget>(this, RoomWidgetTemplate);
+	RoomNodeWidget->SetRoomIndex(InRoomIndex);
+	
+	RoomsNodesWidgets.Add(RoomNodeWidget);
+
+	UCanvasPanelSlot* RoomNodeWidget_CPSlot = MapCanvasPanel->AddChildToCanvas(RoomNodeWidget);
+	RoomNodeWidget_CPSlot->SetAutoSize(true);
+	RoomNodeWidget_CPSlot->SetAlignment(FVector2D(0.0f, 0.0f));
+	RoomNodeWidget_CPSlot->SetZOrder(1);
+	
+	FVector2D ActualNodeLocation = InNodeLocation;
+	
+	if(Connections.Num() != 0)
+	{
+		const FVector2D NeighboursStartLocation = FVector2D(InNodeLocation.X + 70.0f + RoomsNodesOffset.X, InNodeLocation.Y);
+	
+		FVector2D NeighbourLocation = NeighboursStartLocation;
+		
+		for(uint8 i = 0; i < Connections.Num(); ++i)
+		{
+			CreateRoomWidget(Connections[i], InRoomIndex, InRoomsAmount, InIncidenceMatrix, NeighbourLocation);
+
+			if(i != Connections.Num() - 1)
+			{
+				NeighbourLocation.Y += RoomsNodesOffset.Y + 70.0f;
+			}
+		}
+		
+		ActualNodeLocation.Y = NeighbourLocation.Y - (NeighbourLocation.Y  - NeighboursStartLocation.Y) / 2.0f;
+		InNodeLocation.Y = NeighbourLocation.Y;
+	}
+	
+	RoomNodeWidget_CPSlot->SetPosition(ActualNodeLocation);
 }

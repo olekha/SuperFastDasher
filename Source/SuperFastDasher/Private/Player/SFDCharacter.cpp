@@ -8,10 +8,12 @@
 #include "Components/CapsuleComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Camera/CameraActor.h"
+
 #include "GameFramework/SFDVitalityComponent.h"
 #include "GameFramework/SFDCombatManagerComponent.h"
 #include "GameFramework/InputSettings.h"
-#include <SuperFastDasher/Public/Player/Animations/SFDAnimInstance.h>
+#include "Player/Animations/SFDAnimInstance.h"
 #include "GameFramework/SFDPlayerInput.h"
 #include "GameFramework/SFDComboMovesLibrary.h"
 
@@ -180,22 +182,6 @@ float ASFDCharacter::PlayAnimMontage(UAnimMontage* AnimMontage, bool OnWholeBody
 	}
 
 	return Super::PlayAnimMontage(AnimMontage, InPlayRate, StartSectionName);
-}
-
-void ASFDCharacter::OnEnteredIntoRoomLoader()
-{
-	LastVelocityDirection = FVector::ZeroVector;
-
-	if(GetCharacterMovement() != nullptr)
-	{
-		GetCharacterMovement()->StopMovementImmediately();
-		GetCharacterMovement()->DisableMovement();
-	}
-}
-
-void ASFDCharacter::OnStepOutFromRoomLoader()
-{
-
 }
 
 float ASFDCharacter::TakeDamage(float Damage, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
@@ -437,6 +423,17 @@ void ASFDCharacter::HandleMovementSpeed()
 	CharMoveComp->MaxWalkSpeed = IsTired() ? 300.0f : 1000.0f;
 }
 
+void ASFDCharacter::OnPreTeleportToTheNextRoom()
+{
+	LastVelocityDirection = FVector::ZeroVector;
+
+	if(GetCharacterMovement() != nullptr)
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+	}
+}
+
 void ASFDCharacter::StartPreTeleportationTimer(const FTransform& InTeleportationTransform)
 {
 	const UWorld* World = GetWorld();
@@ -453,7 +450,7 @@ void ASFDCharacter::StartPreTeleportationTimer(const FTransform& InTeleportation
 
 void ASFDCharacter::OnPreTeleportationTimerExpired(const FTransform& InTeleportationTransform)
 {
-	TeleportPlayer(InTeleportationTransform);
+	TeleportPlayer(InTeleportationTransform, true);
 }
 
 void ASFDCharacter::StartPostTeleportationTimer()
@@ -475,26 +472,50 @@ void ASFDCharacter::OnPostTeleportationTimerExpired()
 	}
 }
 
-void ASFDCharacter::TeleportPlayer(const FTransform& InTeleportationTransform)
+void ASFDCharacter::TeleportPlayer(const FTransform& InTeleportationTransform, const bool bInstantTeleport /*= true*/)
 {
-	const bool PrevCameraMovementLag = SpringArmComponent->bEnableCameraLag;
-	const bool PrevCameraRotationLag = SpringArmComponent->bEnableCameraRotationLag;
-	
-	SpringArmComponent->bEnableCameraLag = false;
-	SpringArmComponent->bEnableCameraRotationLag = false;
-
-	SetActorLocation(InTeleportationTransform.GetLocation(), false, nullptr, ETeleportType::ResetPhysics);
-	SetActorRotation(InTeleportationTransform.GetRotation(), ETeleportType::ResetPhysics);
-
-	SpringArmComponent->bEnableCameraLag = PrevCameraMovementLag;
-	SpringArmComponent->bEnableCameraRotationLag = PrevCameraRotationLag;
-	
-	if(OnPlayerTeleported.IsBound())
+	if(bInstantTeleport)
 	{
-		OnPlayerTeleported.Broadcast();
-	}
+		const bool PrevCameraMovementLag = SpringArmComponent->bEnableCameraLag;
+		const bool PrevCameraRotationLag = SpringArmComponent->bEnableCameraRotationLag;
 	
-	StartPostTeleportationTimer();
+		SpringArmComponent->bEnableCameraLag = false;
+		SpringArmComponent->bEnableCameraRotationLag = false;
+
+		SetActorLocation(InTeleportationTransform.GetLocation(), false, nullptr, ETeleportType::ResetPhysics);
+		SetActorRotation(InTeleportationTransform.GetRotation(), ETeleportType::ResetPhysics);
+
+		SpringArmComponent->bEnableCameraLag = PrevCameraMovementLag;
+		SpringArmComponent->bEnableCameraRotationLag = PrevCameraRotationLag;
+	
+		if(OnPlayerTeleported.IsBound())
+		{
+			OnPlayerTeleported.Broadcast();
+		}
+	
+		StartPostTeleportationTimer();
+	}
+	else
+	{
+		APlayerController* PlayerController = SFD::GetPlayerController(this);
+		if(!ensureAlways(IsValid(PlayerController)))
+		{
+			return;
+		}
+		
+		ACameraActor* TransitionCamera = SFD::GetCameraActorForTransitionBetweenRooms(this);
+		if(ensureAlways(IsValid(TransitionCamera)))
+		{
+			//@TODO implement correct view point location and rotation retrieving 
+			{
+				TransitionCamera->SetActorTransform(GetCameraTransform());
+			}
+    
+			PlayerController->SetViewTarget(TransitionCamera, FViewTargetTransitionParams());
+		}
+        		
+		StartPreTeleportationTimer(InTeleportationTransform);
+	}
 }
 
 FTransform ASFDCharacter::GetCameraTransform() const
