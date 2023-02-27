@@ -164,3 +164,14 @@ ACameraActor* SFD::GetCameraActorForTransitionBetweenRooms(const UObject* InWorl
 
 	return static_cast<bool>(CameraActorItr) ? *CameraActorItr : nullptr;
 }
+
+FString SFD::EnumToString(const FString& InEnumName, uint8 InEnumValue)
+{
+	const UEnum* const EnumPtr = FindObject<UEnum>(ANY_PACKAGE, *InEnumName, true);
+	if (IsValid(EnumPtr))
+	{
+		return EnumPtr->GetNameStringByValue(InEnumValue);
+	}
+
+	return {};
+}

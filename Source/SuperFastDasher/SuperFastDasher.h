@@ -96,6 +96,8 @@ namespace SFD
 	
 	USFDLevelsManager* GetLevelsManager(const UObject* InWorldContext);
 	ACameraActor* GetCameraActorForTransitionBetweenRooms(const UObject* InWorldContext);
+
+	FString EnumToString(const FString& InEnumName, uint8 InEnumValue);
 }
 
 DECLARE_MULTICAST_DELEGATE(FVoidDelegate);
